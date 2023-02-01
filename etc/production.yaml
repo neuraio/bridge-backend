@@ -1,0 +1,41 @@
+Debug: false
+Listen: 0.0.0.0:7999
+DB:
+  Driver: mysql
+  Source: ape_admin:ape_admin@tcp(mysql.bridge)/bridge_service?charset=utf8mb4&parseTime=True&loc=Local
+  Debug:  false
+EtcdEndpoints:
+  - "http://etcd.bridge"
+Valut:
+  Endpoint: https://vault-agent-injector-svc.vault
+  Role: 41524d66-95b0-9523-136e-fd24ee9fcac5
+  Secret: eea7419e-fc7c-d684-45a2-c6eb2171a6c9
+ChainCfg:
+  - RpcUrl: https://bas.metaapesgame.com/bas_mainnet_full_rpc #bas
+    Graph: https://bas.metaapesgame.com/bas_mainnet_full_rpc/graphql
+    BlockStep: 5
+    BlockDelay: 13
+    NetworkId: 16350
+    AdminAddress: 0x47879DDeB5C5950d56089dB7bC1ba2B8509BF487
+    BridgeContract: 0x6Be6D75f422FBcb42C90420621115718E7101724
+  - RpcUrl: http://38.77.226.171:20200 #bsc
+    Graph: http://38.77.226.171:20200/graphql
+    BlockStep: 5
+    BlockDelay: 13
+    NetworkId: 56
+    AdminAddress: 0x47879DDeB5C5950d56089dB7bC1ba2B8509BF487
+    BridgeContract: 0x52dc819F5b7e23d3493b785f8a10e998144E6173
+  - RpcUrl: http://154.212.140.43:19090 #polygon
+    Graph: http://154.212.140.43:19090/graphql
+    BlockStep: 5
+    BlockDelay: 13
+    NetworkId: 137
+    AdminAddress: 0x47879DDeB5C5950d56089dB7bC1ba2B8509BF487
+    BridgeContract: 0xc05DB3d68E57281eea7b9d956d5Ed195a8B99eD7
+  - RpcUrl: https://edge.metaapesgame.com/edge_mainnet_full_rpc_1 #edge
+    BlockStep: 5
+    BlockDelay: 13
+    NetworkId: 100
+    AdminAddress: 0x47879DDeB5C5950d56089dB7bC1ba2B8509BF487
+    BridgeContract: 0xb8180C5F329944cede412072Ff369eFe51501b64
+

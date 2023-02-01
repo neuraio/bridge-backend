@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  bridge:
+    build: .
+    ports:
+      - "7999:7999"
+    configs:
+      - source: default_config
+        target: /go/src/etc/config.yaml
+configs:
+  default_config:
+    file: etc/config.yaml
