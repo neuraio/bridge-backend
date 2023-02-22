@@ -8,9 +8,9 @@ import (
 )
 
 type synchronizeProgressRecord interface {
-	startRecord(height uint64) error
+	startRecord() error
 	latestHeight() (uint64, error)
-	autoCommitRecord() (string, error)
+	autoCommitRecord(height uint64) (string, error)
 }
 
 type synchronizeProgressMysqlRecorder struct {
@@ -18,26 +18,8 @@ type synchronizeProgressMysqlRecorder struct {
 	dataModel           *database.SynchronizationProgressRecord
 }
 
-func (s synchronizeProgressMysqlRecorder) startRecord(height uint64) error {
-
-	s.mysqlDatabaseClient.begin()
-
-	s.dataModel.BlockHeight = height
-	rawTransaction := s.mysqlDatabaseClient.getRawClient()
-	mysqlClient, ok := rawTransaction.(*gorm.DB)
-	if !ok {
-		logrus.Fatalln("Weird! convert raw transaction client error")
-	}
-
-	if err := mysqlClient.Save(s.dataModel).Error; err != nil {
-		if e := s.mysqlDatabaseClient.rollback(); e != nil {
-			logrus.Errorf("start record %d, rollback %s", height, err.Error())
-		}
-
-		return err
-	}
-
-	return nil
+func (s synchronizeProgressMysqlRecorder) startRecord() error {
+	return s.mysqlDatabaseClient.begin()
 }
 
 func (s synchronizeProgressMysqlRecorder) latestHeight() (uint64, error) {
@@ -47,7 +29,18 @@ func (s synchronizeProgressMysqlRecorder) latestHeight() (uint64, error) {
 	return s.dataModel.BlockHeight, nil
 }
 
-func (s synchronizeProgressMysqlRecorder) autoCommitRecord() (string, error) {
+func (s synchronizeProgressMysqlRecorder) autoCommitRecord(height uint64) (string, error) {
+	s.dataModel.BlockHeight = height
+	rawTransaction := s.mysqlDatabaseClient.getRawClient()
+	mysqlClient, ok := rawTransaction.(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+
+	if err := mysqlClient.Save(s.dataModel).Error; err != nil {
+		logrus.Errorf("update block height %d  %s", height, err.Error())
+		s.mysqlDatabaseClient.setError(err)
+	}
 	return s.mysqlDatabaseClient.autoCommit()
 }
 
@@ -63,7 +56,7 @@ func newSynchronizeProgressMysqlRecorder(mysqlTransaction dataRecorderTransactio
 }
 
 type dataRecorderTransaction interface {
-	begin()
+	begin() error
 	commit() error
 	rollback() error
 	autoCommit() (string, error)
@@ -81,9 +74,10 @@ func newDataRecorderMysqlTransaction(client *gorm.DB) *dataRecorderMysqlTransact
 	return &dataRecorderMysqlTransaction{mysqlClient: client}
 }
 
-func (d *dataRecorderMysqlTransaction) begin() {
+func (d *dataRecorderMysqlTransaction) begin() error {
 	d.mysqlTransaction = d.mysqlClient.Begin()
 	d.err = nil
+	return d.mysqlTransaction.Error
 }
 
 func (d *dataRecorderMysqlTransaction) setError(err error) {

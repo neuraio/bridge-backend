@@ -3,6 +3,7 @@ package event
 import (
 	"context"
 	"errors"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -15,13 +16,14 @@ import (
 type eventFetchThroughRpc struct {
 	networkId                   networkId
 	ethClient                   *ethclient.Client
+	logFilter                   ethereum.FilterQuery
 	blockStep                   int           // how many blocks in one graph query
 	heightDelay                 int           // how many blocks delay comparing to the latest block height
 	fetchInterval               time.Duration // time wait between each single graph query
 	synchronizeProgressRecorder synchronizeProgressRecord
 }
 
-func NewEventFetchThroughRpc(rpcClient *ethclient.Client, blockStep, blockDelay int, networkId networkId, interval time.Duration, dataRecordTransaction dataRecorderTransaction) (*eventFetchThroughRpc, error) {
+func NewEventFetchThroughRpc(rpcClient *ethclient.Client, contract721, contract20 string, blockStep, blockDelay int, networkId networkId, interval time.Duration, dataRecordTransaction dataRecorderTransaction) (*eventFetchThroughRpc, error) {
 
 	height, err := rpcClient.BlockNumber(context.Background())
 	if err != nil {
@@ -35,8 +37,14 @@ func NewEventFetchThroughRpc(rpcClient *ethclient.Client, blockStep, blockDelay 
 	}
 
 	return &eventFetchThroughRpc{
-		networkId:                   networkId,
-		ethClient:                   rpcClient,
+		networkId: networkId,
+		ethClient: rpcClient,
+		logFilter: ethereum.FilterQuery{
+			FromBlock: new(big.Int),
+			ToBlock:   new(big.Int),
+			Addresses: []common.Address{common.HexToAddress(contract20), common.HexToAddress(contract721)},
+			Topics:    [][]common.Hash{{common.HexToHash(BridgeEventTopic), common.HexToHash(BridgeBurnErc20Topic)}},
+		},
 		blockStep:                   blockStep,
 		heightDelay:                 blockDelay,
 		fetchInterval:               interval,
@@ -86,55 +94,57 @@ func (ef *eventFetchThroughRpc) subscribeEvents(event chan *LogEvent, nextSignal
 			}
 			waitForNetworkSynchronization = 0
 
-			for i := fetchHeightFloor; i <= fetchHeightCell; i++ {
-				logs, err := fetchLogWithBlock(ef.ethClient, i)
-				if err != nil {
-					logrus.Errorf("fetch log with block %d,network: %d", i, ef.networkId)
-					goto endLoop
-				}
+			mutex.Lock()
 
-				logrus.Infoln("subscribeEvents fetch new block ", i)
-
-				mutex.Lock()
-
-				if err := ef.synchronizeProgressRecorder.startRecord(i); err != nil {
-					logrus.Errorf("subscribeEvents, network: %d, record error: %s\n", ef.networkId, err.Error())
-					mutex.Unlock()
-					goto endLoop
-				}
-
-				for _, log := range logs {
-					logEvent := &LogEvent{
-						blockNumber:     i,
-						transactionHash: log.TxHash.Hex(),
-						networkId:       ef.networkId,
-						Data:            hexutil.Encode(log.Data),
-					}
-
-					for i := range log.Topics {
-						if i == 0 {
-							logEvent.Topic = log.Topics[i].Hex()
-						} else {
-							logEvent.Args = append(logEvent.Args, log.Topics[i].Hex())
-						}
-					}
-
-					event <- logEvent
-					<-nextSignal
-				}
-
-				reason, err := ef.synchronizeProgressRecorder.autoCommitRecord()
-				if err != nil {
-					logrus.Errorf("data record commit error. block height: %d error message: %s\n", i, err.Error())
-				} else if reason != "" {
-					logrus.Errorf("data rollback. block height: %d rollback reason: %s\n", i, reason)
-				}
-
+			if err := ef.synchronizeProgressRecorder.startRecord(); err != nil {
+				logrus.Errorf("subscribeEvents, network: %d, record error: %s\n", ef.networkId, err.Error())
 				mutex.Unlock()
+				goto endLoop
 			}
 
-		endLoop:
+			ef.logFilter.FromBlock.SetUint64(fetchHeightFloor)
+			ef.logFilter.ToBlock.SetUint64(fetchHeightCell)
+
+			logs, err := fetchLogs(ef.ethClient, ef.logFilter)
+			if err != nil {
+				logrus.Errorf("fetch log with block %d,network: %d", fetchHeightFloor, ef.networkId)
+				mutex.Unlock()
+				goto endLoop
+			}
+
+			for _, log := range logs {
+
+				logEvent := &LogEvent{
+					blockNumber:     log.BlockNumber,
+					transactionHash: log.TxHash.Hex(),
+					networkId:       ef.networkId,
+					Data:            hexutil.Encode(log.Data),
+				}
+
+				for i := range log.Topics {
+					if i == 0 {
+						logEvent.Topic = log.Topics[i].Hex()
+					} else {
+						logEvent.Args = append(logEvent.Args, log.Topics[i].Hex())
+					}
+				}
+
+				event <- logEvent
+				<-nextSignal
+			}
+
+			reason, err := ef.synchronizeProgressRecorder.autoCommitRecord(fetchHeightCell)
+			if err != nil {
+				logrus.Errorf("data record commit error. block height %d-%d error message: %s", fetchHeightFloor, fetchHeightCell, err.Error())
+			} else if reason != "" {
+				logrus.Errorf("data rollback. block height: %d-%d rollback reason: %s", fetchHeightFloor, fetchHeightCell, reason)
+			} else {
+				logrus.Infof("subscribeEvents fetch new logs from: %d to: %d  ", fetchHeightFloor, fetchHeightCell)
+			}
+
+			mutex.Unlock()
 		}
+	endLoop:
 	}
 }
 
@@ -144,29 +154,11 @@ type LogData struct {
 	Data            string
 }
 
-func fetchLogWithBlock(client *ethclient.Client, blockNumber uint64) ([]*types.Log, error) {
-	logrus.Infof("fetchLogWithBlock, block numer: %d", blockNumber)
+func fetchLogs(client *ethclient.Client, query ethereum.FilterQuery) ([]types.Log, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	block, err := client.BlockByNumber(ctx, big.NewInt(int64(blockNumber)))
-	if err != nil {
-		return nil, err
-	}
+	return client.FilterLogs(ctx, query)
 
-	if block.Transactions().Len() == 0 {
-		return nil, nil
-	}
-
-	logs := make([]*types.Log, 0)
-
-	for _, transaction := range block.Transactions() {
-		receipt, err := client.TransactionReceipt(context.Background(), transaction.Hash())
-		if err != nil {
-			return nil, err
-		}
-		logs = append(logs, receipt.Logs...)
-	}
-	return logs, nil
 }

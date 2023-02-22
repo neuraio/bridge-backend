@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bridge-backend-service
+  namespace: bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bridge-backend-service
+  template:
+    metadata:
+      labels:
+        app: bridge-backend-service
+    spec:
+      containers:
+        - image: hub.docker.com/ankrnetwork/{{branch}}/{{repo_name}}:release
+          name: bridge-backend-service
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 7999
+              protocol: TCP
+              name: web
+          volumeMounts:
+            - name: configuration
+              mountPath: /go/src/app/app/etc
+              readOnly: true
+      volumes:
+        - name: configuration
+          configMap:
+            name: configuration
+
+# create config map
+# kubectl create configmap configuration --from-file=etc/config.yaml
+
+#---
+#apiVersion: v1
+#kind: Service
+#metadata:
+#  name: bridge-backend-service
+#  namespace: bridge
+#spec:
+#  ports:
+#    - name: rest
+#      port: 80
+#      protocol: TCP
+#      targetPort: 7999
+#  selector:
+#    app: bridge-backend-service
+#  type: ClusterIP
+
+#---
+#apiVersion: extensions/v1beta1
+#kind: Ingress
+#metadata:
+#  name: bridge-backend-service
+#  namespace: bridge
+#spec:
+#  ingressClassName: nginx
+#  rules:
+#    - host: bridge-backend.ankr.com
+#      http:
+#        paths:
+#          - backend:
+#              serviceName: bridge-backend-service
+#              servicePort: 80
+#            path: /
+#            pathType: ImplementationSpecific
+#  tls:
+#    - hosts:
+#        - bridge-backend.ankr.com
+#      secretName: nginx-ingress-tls

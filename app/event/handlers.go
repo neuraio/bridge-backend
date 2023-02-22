@@ -2,31 +2,40 @@ package event
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/ApeGame/bridge-backend/app/database"
 	bridge "github.com/ApeGame/bridge-backend/app/pkg/node/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
 )
 
-const DefaultBridgeFee = 0.0015
+const (
+	DefaultBridgeFee = 0.002
+)
 
 const (
-	recordsForOnceJob    = 20
+	recordsForOnceJob    = 30
 	mintEventTopic       = ""
-	bridgeEventTopic     = "0xa32c8d97b98adc135b448bc36f8fd4fbdc09c4a7bd832e5e9a0510051a75f89c" //event Sent(address sender, address srcNft, uint256 tokenId, uint256 dstChId, address reciver, address dstNft)
-	bridgeBurnErc20Topic = "0x50e22ad3fc6c213f811692f757b38468af04f08c4377a69004aaf21c7f04485b" //event Burned(bytes32 indexed burnId, address sender, address receiver, address token, uint256 amount, uint256 dstChainId, uint256 nonce)
+	BridgeEventTopic     = "0xa32c8d97b98adc135b448bc36f8fd4fbdc09c4a7bd832e5e9a0510051a75f89c" //event Sent(address sender, address srcNft, uint256 tokenId, uint256 dstChId, address reciver, address dstNft)
+	BridgeBurnErc20Topic = "0x50e22ad3fc6c213f811692f757b38468af04f08c4377a69004aaf21c7f04485b" //event Burned(bytes32 indexed burnId, address sender, address receiver, address token, uint256 amount, uint256 dstChainId, uint256 nonce)
 )
 
 type Erc20ContractAddress struct {
 	NetworkId       networkId
 	ContractAddress string
+	MinimumFee      *big.Int
 }
+
+var senderLocker = make(map[networkId]map[common.Address]*sync.Mutex)
 
 var erc20ContractPairs [][]*Erc20ContractAddress
 var erc20ContractPairsLocker = new(sync.Mutex)
@@ -54,7 +63,7 @@ var _ eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTrans
 }
 var bridgeEventHandle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
 	// double check
-	if event.Topic != bridgeEventTopic {
+	if event.Topic != BridgeEventTopic {
 		return errors.New("invalid topic")
 	}
 
@@ -104,7 +113,7 @@ var bridgeEventHandle eventHandlerFunction = func(event *LogEvent, transaction d
 var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
 
 	// double check
-	if event.Topic != bridgeBurnErc20Topic {
+	if event.Topic != BridgeBurnErc20Topic {
 		return errors.New("invalid topic")
 	}
 
@@ -119,7 +128,7 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 	burnId := event.Args[0]
 
 	// deserialization
-	bridgeEvent := new(bridge.BridgeErc20Burned)
+	bridgeEvent := new(bridge.Bridgeerc20Burned)
 	hexData, err := hex.DecodeString(event.Data[2:])
 	if err != nil {
 		return err
@@ -129,10 +138,17 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 		return err
 	}
 
-	destinationContractAddress := getDestinationContractAddress(event.networkId, networkId(bridgeEvent.DstChainId.Uint64()), bridgeEvent.Token.Hex())
+	destinationContractAddress, destinationContractMinimumFee := getDestinationContractAddress(event.networkId, networkId(bridgeEvent.DstChainId.Uint64()), bridgeEvent.Token.Hex())
 	if destinationContractAddress == "" {
 		logrus.Warnf("[Skip] Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
 		return nil
+	}
+
+	fee := big.NewInt(0).Mul(bridgeEvent.Amount, big.NewInt(int64(DefaultBridgeFee*1e8)))
+	fee = fee.Div(fee, big.NewInt(1e8))
+
+	if fee.Cmp(destinationContractMinimumFee) == -1 {
+		fee = destinationContractMinimumFee
 	}
 
 	recorder := &database.BridgeHistory{
@@ -152,6 +168,7 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 		DestinationAddress:         bridgeEvent.Receiver.Hex(),
 
 		Erc20Amount: bridgeEvent.Amount.String(),
+		Fee:         fee.String(),
 
 		Status: database.NftBridgeUndo,
 	}
@@ -166,12 +183,12 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 	return mysqlClient.Save(recorder).Error
 }
 
-func getDestinationContractAddress(sourceNetwork, destinationNetwork networkId, sourceContractAddress string) string {
+func getDestinationContractAddress(sourceNetwork, destinationNetwork networkId, sourceContractAddress string) (string, *big.Int) {
 	erc20ContractPairsLocker.Lock()
 	defer erc20ContractPairsLocker.Unlock()
 
 	if len(erc20ContractPairs) == 0 {
-		return ""
+		return "", nil
 	}
 
 	var pairIndex = -1
@@ -184,18 +201,21 @@ func getDestinationContractAddress(sourceNetwork, destinationNetwork networkId, 
 	}
 
 	if pairIndex < 0 {
-		return ""
+		return "", nil
 	}
 	erc20ContractPair := erc20ContractPairs[pairIndex]
 	var destinationContractAddress string
+	var destinationContractMinimumFee *big.Int
 
 	for i := range erc20ContractPair {
 		if erc20ContractPair[i].NetworkId == destinationNetwork {
 			destinationContractAddress = erc20ContractPair[i].ContractAddress
+			destinationContractMinimumFee = erc20ContractPair[i].MinimumFee
+			break
 		}
 	}
 
-	return destinationContractAddress
+	return destinationContractAddress, destinationContractMinimumFee
 }
 
 var cronJobs = make([]cronJobFunction, 0)
@@ -220,6 +240,7 @@ func registerErc20ContractPairs(chainIds []networkId, erc20ContractMap map[strin
 			erc20ContractPairs[len(erc20ContractPairs)-1] = append(erc20ContractPairs[len(erc20ContractPairs)-1], &Erc20ContractAddress{
 				NetworkId:       pair.NetworkId,
 				ContractAddress: pair.ContractAddress,
+				MinimumFee:      pair.MinimumFee,
 			})
 		}
 	}
@@ -252,7 +273,7 @@ func init() {
 	}
 	abiObject721 = a
 
-	b, e := bridge.BridgeErc20MetaData.GetAbi()
+	b, e := bridge.Bridgeerc20MetaData.GetAbi()
 	if e != nil {
 		panic(e)
 	}
@@ -260,10 +281,10 @@ func init() {
 
 	// register handler
 	// registerHandlerFunction(mintEventTopic, mintEventHandle)
-	registerHandlerFunction(bridgeEventTopic, bridgeEventHandle)
-	registerHandlerFunction(bridgeBurnErc20Topic, bridgeEventBurnErc20Handle)
+	registerHandlerFunction(BridgeEventTopic, bridgeEventHandle)
+	registerHandlerFunction(BridgeBurnErc20Topic, bridgeEventBurnErc20Handle)
 
-	registerJobs(cronJobWrapper(time.Second, jobSendToken), cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken), cronJobWrapper(10*time.Second, jobRefundTransactionResult))
+	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(10*time.Second, jobSendFtToken), cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken), cronJobWrapper(10*time.Second, jobRefundTransactionResult))
 }
 
 func HandleEvent(topic string, event *LogEvent, transaction dataRecorderTransaction) error {
@@ -311,9 +332,102 @@ func isAlreadyMinted(err error) bool {
 	return false
 }
 
-func jobSendToken(_ context.Context) error {
+func jobSendFtToken(_ context.Context) error {
+
+	rows, err := database.GetMysqlClient().Raw("SELECT count(id),destination_network_id,status FROM bridge_histories WHERE (status = ? OR status = ?) AND protocol_type = ? GROUP BY destination_network_id,status ORDER BY status", database.NftBridgePending, database.NftBridgeUndo, database.Erc20).Rows()
+	if err != nil {
+		return err
+	}
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			logrus.Error(err)
+		}
+	}(rows)
+
+	networks := make(map[int]struct{}, 0)
+
+	for rows.Next() {
+		var count int
+		var network int
+		var status int
+		if err := rows.Scan(&count, &network, &status); err != nil {
+			logrus.Error(err)
+			continue
+		}
+		if count > 0 {
+			switch database.BridgeStatus(status) {
+			case database.NftBridgeUndo:
+				networks[network] = struct{}{}
+			case database.NftBridgePending:
+				delete(networks, network)
+			}
+			logrus.Warnf("Network %d Exist Pending Transactions: %d", network, count)
+			continue
+		}
+	}
+	for network := range networks {
+		bridgeHistories := make([]*database.BridgeHistory, 0)
+		if err := database.GetMysqlClient().Where("status = ? AND protocol_type = ? AND destination_network_id = ?", database.NftBridgeUndo, database.Erc20, network).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
+			return err
+		}
+		if len(bridgeHistories) == 0 {
+			continue
+		}
+
+		bridges := make([]*ercBridge, 0, len(bridgeHistories))
+		marks, ids := make([]string, 0, len(bridgeHistories)), make([]interface{}, 0, len(bridgeHistories))
+		for _, bh := range bridgeHistories {
+			bridges = append(bridges, &ercBridge{
+				sourceNetworkId:            networkId(bh.SourceNetworkId),
+				burnId:                     bh.Erc20BurnId,
+				destinationContractAddress: bh.DestinationContractAddress,
+				senderAddress:              bh.SourceAddress,
+				receiverAddress:            bh.DestinationAddress,
+				amountS:                    bh.Erc20Amount,
+				feeS:                       bh.Fee,
+			})
+			ids = append(ids, bh.ID)
+			marks = append(marks, "?")
+		}
+
+		s := fmt.Sprintf("UPDATE bridge_histories SET status = %d WHERE id in (%s)", database.NftBridgePending, strings.Join(marks, ","))
+		if err := database.GetMysqlClient().Exec(s, ids...).Error; err != nil {
+			logrus.Error(err)
+			continue
+		}
+
+		hash, err := MintTokens(networkId(network), bridges)
+		if err != nil || hash == "" {
+			logrus.Errorf("jobSendToken fail: network id: %d,record ids: %v, error: %v", network, ids, err)
+		}
+		if errors.Is(err, PoolBalanceInsufficientError) {
+			s = fmt.Sprintf("UPDATE bridge_histories SET status = %d WHERE id in (%s)", database.NftBridgeUndo, strings.Join(marks, ","))
+			if err := database.GetMysqlClient().Exec(s, ids...).Error; err != nil {
+				logrus.Error(err)
+			}
+			continue
+		}
+		if err != nil {
+			logrus.Warnf("bridge fail. error: %s, protocol: erc20, hash %s, record ids: %v", err.Error(), hash, ids)
+			s = fmt.Sprintf("UPDATE bridge_histories SET destination_transaction_hash = '%s',fail_reason = '%s' WHERE id in (%s)", hash, err.Error(), strings.Join(marks, ","))
+		} else {
+			logrus.Infof("bridge success protocol: erc20, hash %s, record ids: %v", hash, ids)
+			s = fmt.Sprintf("UPDATE bridge_histories SET destination_transaction_hash = '%s' WHERE id in (%s)", hash, strings.Join(marks, ","))
+		}
+
+		if err := database.GetMysqlClient().Exec(s, ids...).Error; err != nil {
+			logrus.Error(err)
+			continue
+		}
+	}
+
+	return nil
+}
+
+func jobSendNftToken(_ context.Context) error {
 	bridgeHistories := make([]database.BridgeHistory, 0)
-	if err := database.GetMysqlClient().Where("status = ?", database.NftBridgeUndo).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
+	if err := database.GetMysqlClient().Where("status = ? AND protocol_type = ?", database.NftBridgeUndo, database.Erc721).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 		return err
 	}
 
@@ -329,15 +443,6 @@ func jobSendToken(_ context.Context) error {
 		var err error
 
 		switch bridgeHistory.ProtocolType {
-		case database.Erc20:
-			// send mint order to destination network
-			hash, err = MintToken(networkId(bridgeHistory.DestinationNetworkId), networkId(bridgeHistory.SourceNetworkId), bridgeHistory.Erc20BurnId, bridgeHistory.DestinationContractAddress, bridgeHistory.SourceAddress, bridgeHistory.DestinationAddress, bridgeHistory.Erc20Amount, DefaultBridgeFee)
-			if err != nil || hash == "" {
-				logrus.Errorf("jobSendToken fail: record id: %d, error: %v", bridgeHistory.ID, err)
-			}
-			if err != nil {
-				bridgeHistory.FailReason = err.Error()
-			}
 		case database.Erc721:
 			// send mint order to destination network
 			hash, err = sentTo(networkId(bridgeHistory.SourceNetworkId), networkId(bridgeHistory.DestinationNetworkId), bridgeHistory.DestinationContractAddress, bridgeHistory.DestinationAddress, bridgeHistory.TokenId)
