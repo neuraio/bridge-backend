@@ -30,9 +30,9 @@ steps:
     script:
       - cd /home/ankr/Ankr-network/bridge-backend-service
       - ls -al
-      #- 
-      #- docker-compose up -d
-      #
+      - docker-compose build
+      - docker-compose stop 
+      - docker-compose up -d
   when:
     event:
       - push
