@@ -1,0 +1,39 @@
+kind: pipeline
+name: default
+steps:
+- name: sync-dockerfile
+  image: drillster/drone-rsync
+  settings:
+    user: root
+    key:
+      from_secret: appserver-prod-idrsa
+    hosts:
+      - 10.132.153.127
+    source: ./*
+    target: /home/ankr/Ankr-network/bridge-backend-service
+  when:
+    event:
+      - push
+    branch:
+      - develop
+
+- name: Deploy app DEV
+  image: appleboy/drone-ssh:1.6.6-linux-amd64
+  settings:
+    host:
+      - 10.132.153.127
+    username: root
+    key:
+      from_secret: appserver-prod-idrsa
+    port: 22
+    command_timeout: 2m
+    script:
+      - cd /home/ankr/Ankr-network/bridge-backend-service
+      - ls -al
+      #- 
+      #- docker-compose up -d
+  when:
+    event:
+      - push
+    branch:
+      - develop
