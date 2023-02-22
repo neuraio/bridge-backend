@@ -149,7 +149,7 @@ func MintTokens(destinationNetworkId networkId, bridges []*ercBridge) (string, e
 			Fee:        fee,
 			RefChainId: big.NewInt(int64(b.sourceNetworkId)),
 		}
-		copy(req.BurnId[:], common.Hex2BytesFixed(strings.TrimLeft(b.burnId, "0x"), 32))
+		copy(req.BurnId[:], common.Hex2BytesFixed(strings.TrimPrefix(b.burnId, "0x"), 32))
 
 		reqs = append(reqs, req)
 	}
@@ -198,7 +198,7 @@ func MintToken(destinationNetworkId, sourceNetworkId networkId, burnId, destinat
 		RefChainId: big.NewInt(int64(sourceNetworkId)),
 	}
 
-	copy(req.BurnId[:], common.Hex2BytesFixed(strings.TrimLeft(burnId, "0x"), 32))
+	copy(req.BurnId[:], common.Hex2BytesFixed(strings.TrimPrefix(burnId, "0x"), 32))
 
 	signature, err := client.erc20MintSigner(client.authenticator.From, client.bridgeContractAddressErc20, senderAddress, receiverAddress, destinationContractAddress, req.BurnId, req.Amount, req.Fee, req.RefChainId, big.NewInt(int64(destinationNetworkId)))
 	if err != nil {
