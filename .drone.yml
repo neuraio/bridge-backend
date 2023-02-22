@@ -32,6 +32,7 @@ steps:
       - ls -al
       #- 
       #- docker-compose up -d
+      #
   when:
     event:
       - push
