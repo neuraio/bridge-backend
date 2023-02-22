@@ -6,9 +6,9 @@ steps:
   settings:
     user: root
     key:
-      from_secret: appserver-prod-idrsa
+      from_secret: ape_mategame_dev
     hosts:
-      - 10.132.153.127
+      - 52.53.250.208
     source: ./*
     target: /home/ankr/Ankr-network/bridge-backend-service
   when:
@@ -21,10 +21,10 @@ steps:
   image: appleboy/drone-ssh:1.6.6-linux-amd64
   settings:
     host:
-      - 10.132.153.127
+      - 52.53.250.208
     username: root
     key:
-      from_secret: appserver-prod-idrsa
+      from_secret: ape_mategame_dev
     port: 22
     command_timeout: 2m
     script:
