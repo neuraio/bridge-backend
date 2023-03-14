@@ -100,6 +100,8 @@ func Erc721OwnerOfCallPost(rpcEndpoint, contractAddress string, tokenId uint64) 
 func Erc20BalanceOf(rpcEndpoint, accountAddress, contractAddress string) (*big.Int, error) {
 	logrus.Debugf("Erc20BalanceOf contract: %s,account: %s", contractAddress, accountAddress)
 
+	accountAddress = strings.ToLower(accountAddress)
+	contractAddress = strings.ToLower(contractAddress)
 	q := fmt.Sprintf(balanceRequestBody, accountAddress)
 	if contractAddress != "0x0000000000000000000000000000000000000000" {
 		q = fmt.Sprintf(erc20BalanceRequestBody, strings.TrimPrefix(accountAddress, "0x"), contractAddress)
@@ -136,7 +138,7 @@ func Erc20BalanceOf(rpcEndpoint, accountAddress, contractAddress string) (*big.I
 		}
 		b, ok := new(big.Int).SetString(balance, 0)
 		if !ok {
-			return nil, fmt.Errorf("invalid balance %s", balance)
+			return nil, fmt.Errorf("invalid balance %s %v", balance, r)
 		}
 		return b, nil
 	}

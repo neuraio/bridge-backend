@@ -18,7 +18,6 @@ func InitializeMysqlDatabase() error {
 	}
 
 	if err := client.AutoMigrate(
-		// &AssetNft{},
 		&Erc721BridgeContractAddress{},
 		&Erc20BridgeContractAddress{},
 		&BridgeHistory{},

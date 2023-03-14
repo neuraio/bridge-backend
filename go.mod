@@ -10,6 +10,7 @@ require (
 	github.com/machinebox/graphql v0.2.2
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/viper v1.12.0
+	github.com/status-im/keycard-go v0.0.0-20190316090335-8537d3370df4
 	gorm.io/driver/mysql v1.3.4
 	gorm.io/gorm v1.23.6
 )

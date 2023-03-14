@@ -39,8 +39,7 @@ steps:
   - name: build app PROD
     image: plugins/docker
     settings:
-      registry: hub.docker.com
-      repo: hub.docker.com/ankrnetwork/${DRONE_REPO_NAME}
+      repo: ankrnetwork/${DRONE_REPO_NAME}
       tags: ["${DRONE_COMMIT_SHA:0:7}", "release"]
       username:
         from_secret: registry_user
