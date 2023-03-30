@@ -49,7 +49,7 @@ steps:
       event:
         - push
       branch:
-        - main
+        - test #not use
 
   - name: deploy app PROD
     image: danielgormly/drone-plugin-kube:0.1.0
@@ -65,4 +65,4 @@ steps:
       event:
         - push
       branch:
-        - main
+        - test #not use
