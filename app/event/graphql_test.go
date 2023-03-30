@@ -9,7 +9,7 @@ import (
 )
 
 const graphqlEndpoint = `https://testnet.ankr.com/graphql`
-const rpcEndpoint = `https://testnet.ankr.com`
+const rpcEndpoint = `https://rpc.ankr.com/polygon_mumbai/128bdedab70a53096c6b5132d94384254aee84b8491502b928ab6c08652a7b78`
 
 func TestNewEventFetchThroughGraphQL(t *testing.T) {
 
@@ -23,7 +23,7 @@ func TestNewEventFetchThroughGraphQL(t *testing.T) {
 		t.Log(s)
 	}
 
-	if _, err := NewEventFetchThroughGraphQL(rpcClient, graphClient, 5, 10, 0, 0, nil); err != nil {
+	if _, err := NewEventFetchThroughGraphQL(rpcClient, graphClient, "", "", 5, 10, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -37,14 +37,14 @@ func TestFetchThroughGraphQL(t *testing.T) {
 
 	var graphQLResponse eventLogGraphQueryResponseModel
 
-	if err := graphClient.Run(context.Background(), graphql.NewRequest(fmt.Sprintf(eventLogGraphQuery, 1088056, 1088060)), &graphQLResponse); err != nil {
+	if err := graphClient.Run(context.Background(), graphql.NewRequest(fmt.Sprintf(getEventLogGraphQueryWithFilters([]string{"0x21a4813D3A13fD762d00FC3551D67553453c5c19", "0xc09d350573715CD441791603c4F01a59Dd832699"}), 5274520, 5274530)), &graphQLResponse); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Log(graphQLResponse)
 
-	if graphQLResponse.Blocks[0].Number.(float64) != 1088056 {
-		t.FailNow()
+	if graphQLResponse.Logs[0].Transaction.Block.Number != 5274525 {
+		t.Fail()
 	}
 }
 

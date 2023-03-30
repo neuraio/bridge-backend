@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	bridge "github.com/ApeGame/bridge-backend/app/pkg/node/abi"
 	"github.com/ethereum/go-ethereum/crypto"
 	"math/big"
-	"strings"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -21,6 +21,16 @@ import (
 type VaultSigner struct {
 	vaultClient *vault.Client
 	chainID     int
+}
+
+type SignMintErc20 struct {
+	Sender          string
+	Receiver        string
+	Token           string
+	BurnId          string
+	Amount          *big.Int
+	Fee             *big.Int
+	SourceNetworkId *big.Int
 }
 
 var once = new(sync.Once)
@@ -83,14 +93,15 @@ func (vs *VaultSigner) Signer(address common.Address, tx *types.Transaction) (*t
 	return getSignTxByVault(signedTx)
 }
 
-func (vs *VaultSigner) SignMintErc20(address, bridge common.Address, sender, receiver, token, burnId string, amount, sourceNetworkId, destinationNetworkId *big.Int) (string, error) {
+func (vs *VaultSigner) SignMintErc20(address, bridge common.Address, sender, receiver, token string, burnId [32]byte, amount, fee, sourceNetworkId, destinationNetworkId *big.Int) (string, error) {
 	hash := crypto.Keccak256Hash(
 		common.HexToAddress(sender).Bytes(),
 		common.HexToAddress(receiver).Bytes(),
 		common.HexToAddress(token).Bytes(),
 		common.LeftPadBytes(amount.Bytes(), 32),
+		common.LeftPadBytes(fee.Bytes(), 32),
 		common.LeftPadBytes(sourceNetworkId.Bytes(), 32),
-		common.Hex2BytesFixed(strings.TrimLeft(burnId, "0x"), 32),
+		burnId[:],
 		common.LeftPadBytes(destinationNetworkId.Bytes(), 32),
 		bridge.Bytes(),
 	)
@@ -114,6 +125,18 @@ func (vs *VaultSigner) SignMintErc20(address, bridge common.Address, sender, rec
 	}
 
 	return signedTx, nil
+}
+
+func (vs *VaultSigner) SignMintErc20S(address, bridgeContract common.Address, destinationNetworkId *big.Int, bridges []bridge.BridgeMintReq) ([]string, error) {
+	hashes := make([]string, 0, len(bridges))
+	for _, b := range bridges {
+		hash, err := vs.SignMintErc20(address, bridgeContract, b.Sender.Hex(), b.Receiver.Hex(), b.Token.Hex(), b.BurnId, b.Amount, b.Fee, b.RefChainId, destinationNetworkId)
+		if err != nil {
+			return nil, err
+		}
+		hashes = append(hashes, hash)
+	}
+	return hashes, nil
 }
 
 func getSignTxByVault(txSign string) (*types.Transaction, error) {
@@ -140,7 +163,7 @@ func renewToken(client *vault.Client, roleID string, secretID *auth.SecretID) {
 }
 
 // Starts token lifecycle management. Returns only fatal errors as errors,
-// otherwise returns nil so we can attempt login again.
+// otherwise returns nil, so we can attempt login again.
 func manageTokenLifecycle(client *vault.Client, token *vault.Secret) error {
 	renew := token.Auth.Renewable // You may notice a different top-level field called Renewable. That one is used for dynamic secrets renewal, not token renewal.
 	if !renew {
@@ -176,7 +199,7 @@ func manageTokenLifecycle(client *vault.Client, token *vault.Secret) error {
 
 		// Successfully completed renewal
 		case renewal := <-watcher.RenewCh():
-			logrus.Errorf("Successfully renewed: %#v", renewal)
+			logrus.Infof("Successfully renewed: %#v", renewal)
 		}
 	}
 }

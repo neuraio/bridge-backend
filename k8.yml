@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bridge-backend-service
+  namespace: bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bridge-backend-service
+  template:
+    metadata:
+      labels:
+        app: bridge-backend-service
+    spec:
+      containers:
+        - image: ankrnetwork/bridge-backend:release
+          name: bridge-backend-service
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              protocol: TCP
+              name: web
+          volumeMounts:
+            - name: configuration
+              mountPath: /go/src/app/app/etc
+              readOnly: true
+      volumes:
+        - name: configuration
+          configMap:
+            name: configuration
+

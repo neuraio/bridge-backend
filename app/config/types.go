@@ -2,7 +2,6 @@ package config
 
 type config struct {
 	Debug         bool        `yaml:"Debug"`
-	Listen        string      `yaml:"Listen"`
 	DB            DB          `yaml:"DB"`
 	Valut         ValutConfig `yaml:"Valut"`
 	ChainCfg      []ChainCfg  `yaml:"ChainCfg"`

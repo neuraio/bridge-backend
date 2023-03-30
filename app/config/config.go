@@ -26,10 +26,6 @@ func Debug() bool {
 	return C.Debug
 }
 
-func Listen() string {
-	return C.Listen
-}
-
 func GetDB() DB {
 	return C.DB
 }

@@ -36,8 +36,7 @@ func TestOwnerOfCallPost(t *testing.T) {
 	t.Run("token existed", func(t *testing.T) {
 		owner, err := Erc721OwnerOfCallPost(rpcEndpoint, "0xdf7952b35f24acf7fc0487d01c8d5690a60dba07", 100)
 		if err != nil {
-			t.Error(err)
-			t.Fail()
+			t.Fatal(err)
 		}
 
 		t.Log(owner)
@@ -45,5 +44,13 @@ func TestOwnerOfCallPost(t *testing.T) {
 		if strings.ToLower(owner) != strings.ToLower("0x17539cCa21C7933Df5c980172d22659B8C345C5A") {
 			t.Fail()
 		}
+	})
+
+	t.Run("ft token balance", func(t *testing.T) {
+		balance, err := Erc20BalanceOf(rpcEndpoint, "0xA27e024FA03421d86CD1Dbd48cFf7948B5EcCcbf", "0x734548a9e43d2D564600b1B2ed5bE9C2b911c6aB")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log(balance.String())
 	})
 }

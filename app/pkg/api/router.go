@@ -3,10 +3,12 @@ package api
 import (
 	"errors"
 	"fmt"
+	"github.com/ApeGame/bridge-backend/app/config"
 	"github.com/ApeGame/bridge-backend/app/event"
 	"github.com/ApeGame/bridge-backend/app/pkg/node/tools"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sirupsen/logrus"
+	"math/big"
 	"net/http"
 	"strconv"
 	"time"
@@ -19,6 +21,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+var bridgePoolLimit = new(big.Int).Mul(big.NewInt(5000), big.NewInt(1e18))
 
 var EthRpc = make(map[int64]*EthRpcClient)
 
@@ -76,6 +80,7 @@ type BridgePair struct {
 	ContractIcon    string `json:"contract_icon"`
 	BurnMin         string `json:"burn_min"`
 	BurnMax         string `json:"burn_max"`
+	MinimumFee      string `json:"minimum_fee"`
 }
 
 func listBridgePair(c *gin.Context) {
@@ -97,10 +102,31 @@ func listBridgePair(c *gin.Context) {
 			ContractName:    pair.ContractName,
 			BurnMin:         pair.MinBurn,
 			BurnMax:         pair.MaxBurn,
+			MinimumFee:      pair.MinFee,
 		})
 	}
 
-	c.JSON(http.StatusOK, response.Ok(gin.H{"ft": ft, "nft": nil}))
+	bridgeContractPairs721 := make([]*database.Erc721BridgeContractAddress, 0)
+	if err := database.GetMysqlClient().Find(&bridgeContractPairs721).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, response.Err(err))
+		return
+	}
+
+	nft := make([]*BridgePair, 0, len(bridgeContractPairs721))
+
+	for _, pair := range bridgeContractPairs721 {
+		nft = append(nft, &BridgePair{
+			Network:         pair.NetworkId,
+			ContractAddress: pair.Address,
+			ContractIcon:    pair.Icon,
+			ContractName:    pair.Name,
+			BurnMin:         "1",
+			BurnMax:         "1",
+			MinimumFee:      "0",
+		})
+	}
+
+	c.JSON(http.StatusOK, response.Ok(gin.H{"ft": ft, "nft": nft}))
 }
 
 func listHistoryRecords(c *gin.Context) {
@@ -125,12 +151,33 @@ type synchronizationProgress struct {
 var synchronization = make(map[int]*synchronizationProgress)
 
 func health(c *gin.Context) {
-	spr := make([]*database.SynchronizationProgressRecord, 0)
-	if err := database.GetMysqlClient().Find(&spr).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, response.Err(err))
+	failCheck := make([]string, 0)
+
+	erc20s := make([]*database.Erc20BridgeContractAddress, 0)
+	if err := database.GetMysqlClient().Find(&erc20s).Error; err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 		return
 	}
-	failCheck := make([]string, 0, len(spr))
+	for _, erc20 := range erc20s {
+		for _, chain := range config.GetChainCfg() {
+			if int(erc20.NetworkId) == chain.NetworkId {
+				balance, err := tools.Erc20BalanceOf(chain.RpcUrl, chain.BridgeContract20, erc20.ContractAddress)
+				if err != nil {
+					c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+					return
+				}
+				if balance.Cmp(bridgePoolLimit) == -1 {
+					failCheck = append(failCheck, fmt.Sprintf("bridge %s pool amount %s is lower than %s", chain.BridgeContract20, balance.String(), bridgePoolLimit.String()))
+				}
+			}
+		}
+	}
+
+	spr := make([]*database.SynchronizationProgressRecord, 0)
+	if err := database.GetMysqlClient().Find(&spr).Error; err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		return
+	}
 	for i := range spr {
 		r, f := synchronization[spr[i].NetworkId]
 		if !f {
@@ -149,11 +196,40 @@ func health(c *gin.Context) {
 		}
 	}
 
+	if err := checkBridgeStatus(); err != nil {
+		failCheck = append(failCheck, err.Error())
+	}
+
 	if len(failCheck) > 0 {
-		c.JSON(http.StatusExpectationFailed, failCheck)
+		c.AbortWithStatusJSON(http.StatusExpectationFailed, failCheck)
 		return
 	}
+	c.JSON(http.StatusOK, "OK")
 	return
+}
+
+func checkBridgeStatus() error {
+	for k, v := range event.PoolBalanceInsufficient {
+		if v {
+			return fmt.Errorf("erc20 %s bridge pool balance insufficient, please have a check and refill it", k)
+		}
+	}
+
+	var count int64
+	if err := database.GetMysqlClient().Model(new(database.BridgeHistory)).Where("status = ? OR fail_reason != ''", database.NftBridgeFail).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return fmt.Errorf("%d failed transactions exist", count)
+	}
+
+	if err := database.GetMysqlClient().Model(new(database.BridgeHistory)).Where("status = ?", database.NftBridgeUndo).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 50 {
+		return fmt.Errorf("%d transactions undo", count)
+	}
+	return nil
 }
 
 func ownerOf(c *gin.Context) {

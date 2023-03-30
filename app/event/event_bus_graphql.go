@@ -2,11 +2,11 @@ package event
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/ApeGame/bridge-backend/app/pkg/node/tools"
-	"reflect"
-	"strconv"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -24,19 +24,18 @@ const (
 )
 
 const eventLogGraphQuery = `{
-  blocks(from: %d, to: %d) {
-    number
-    timestamp
-    transactions {
-      hash
-      logs {
-        topics
-        data
-        account {
-          address
-        }
-      }
-    }
+  logs(filter: {fromBlock: %d, toBlock: %d, addresses: placeHolderAddresses, topics:[placeHolderTopics]}) {
+   account {
+	address
+  },
+	transaction {
+	  block {
+		number
+	  }
+	  hash
+	}
+	topics
+	data
   }
 }`
 
@@ -49,6 +48,7 @@ type LogEvent struct {
 	Topic           string
 	Args            []string
 	Data            string
+	Address         string
 }
 
 type eventSubscriber interface {
@@ -59,13 +59,14 @@ type FetchThroughGraphQL struct {
 	networkId                   networkId
 	ethClient                   *ethclient.Client
 	graphClient                 *graphql.Client
+	logFiltersQuery             string        // including addresses and topics
 	blockStep                   int           // how many blocks in one graph query
 	heightDelay                 int           // how many blocks delay comparing to the latest block height
 	fetchInterval               time.Duration // time wait between each single graph query
 	synchronizeProgressRecorder synchronizeProgressRecord
 }
 
-func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graphql.Client, blockStep, blockDelay int, networkId networkId, interval time.Duration, dataRecordTransaction dataRecorderTransaction) (*FetchThroughGraphQL, error) {
+func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graphql.Client, contract721, contract20 string, blockStep, blockDelay int, networkId networkId, interval time.Duration, dataRecordTransaction dataRecorderTransaction) (*FetchThroughGraphQL, error) {
 
 	height, err := rpcClient.BlockNumber(context.Background())
 	if err != nil {
@@ -78,17 +79,18 @@ func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graph
 		return nil, errors.New("the latest block height is lower than blocks delay")
 	}
 
-	if err := graphClient.Run(context.Background(), graphql.NewRequest(fmt.Sprintf(eventLogGraphQuery, height-uint64(blockDelay), height-uint64(blockDelay-blockStep))), nil); err != nil {
-		return nil, err
+	eventFetcher := &FetchThroughGraphQL{
+		networkId:       networkId,
+		ethClient:       rpcClient,
+		graphClient:     graphClient,
+		blockStep:       blockStep,
+		heightDelay:     blockDelay,
+		fetchInterval:   interval,
+		logFiltersQuery: getEventLogGraphQueryWithFilters([]string{contract20, contract721}),
 	}
 
-	eventFetcher := &FetchThroughGraphQL{
-		networkId:     networkId,
-		ethClient:     rpcClient,
-		graphClient:   graphClient,
-		blockStep:     blockStep,
-		heightDelay:   blockDelay,
-		fetchInterval: interval,
+	if err := graphClient.Run(context.Background(), graphql.NewRequest(fmt.Sprintf(eventFetcher.logFiltersQuery, height-uint64(blockDelay), height-uint64(blockDelay-blockStep))), nil); err != nil {
+		return nil, err
 	}
 
 	if dataRecordTransaction != nil {
@@ -98,34 +100,54 @@ func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graph
 	return eventFetcher, nil
 }
 
+type eventLogGraphQueryBlockModel struct {
+	Number uint64 `json:"number"`
+}
+
 type eventLogGraphQueryAccountModel struct {
 	Address string `json:"address"`
 }
 
-type eventLogGraphQueryLogModel struct {
-	Data    string                         `json:"data"`
-	Topics  []string                       `json:"topics"`
-	Account eventLogGraphQueryAccountModel `json:"account"`
-}
-
 type eventLogGraphQueryTransactionModel struct {
-	Hash string                       `json:"hash"`
-	Logs []eventLogGraphQueryLogModel `json:"logs"`
+	Hash  string                        `json:"hash"`
+	Block *eventLogGraphQueryBlockModel `json:"block"`
 }
 
-type eventLogGraphQueryBlockModel struct {
-	Number       interface{}                          `json:"number"` // eg: unsigned integer for ethereum however string for bsc
-	Timestamp    string                               `json:"timestamp"`
-	Transactions []eventLogGraphQueryTransactionModel `json:"transactions"`
+type eventLogGraphQueryLogModel struct {
+	Account     *eventLogGraphQueryAccountModel     `json:"account"`
+	Transaction *eventLogGraphQueryTransactionModel `json:"transaction"`
+	Data        string                              `json:"data"`
+	Topics      []string                            `json:"topics"`
 }
 
 type eventLogGraphQueryResponseModel struct {
-	Blocks []eventLogGraphQueryBlockModel `json:"blocks"`
+	Logs []*eventLogGraphQueryLogModel `json:"logs"`
 }
 
 var mutex = new(sync.Mutex)
 
 const logDataMaxLength = 50
+
+var eventLogGraphQueryWithFilters string
+
+func getEventLogGraphQueryWithFilters(addresses []string) string {
+	address, err := json.Marshal(addresses)
+	if err != nil {
+		logrus.Fatalln(err)
+	}
+
+	topic, err := json.Marshal([]string{BridgeBurnErc20Topic, BridgeEventTopic})
+	if err != nil {
+		logrus.Fatalln(err)
+	}
+
+	eventLogGraphQueryWithFilters = strings.ReplaceAll(eventLogGraphQuery, "placeHolderTopics", string(topic))
+	eventLogGraphQueryWithFilters = strings.ReplaceAll(eventLogGraphQueryWithFilters, "placeHolderAddresses", string(address))
+
+	logrus.Debugln("eventLogGraphQueryAssembly", eventLogGraphQueryWithFilters)
+
+	return eventLogGraphQueryWithFilters
+}
 
 // this method will block
 func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal chan struct{}) {
@@ -175,82 +197,64 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 
 			var graphQLResponse eventLogGraphQueryResponseModel
 			ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
-			err = ef.graphClient.Run(ctx, graphql.NewRequest(fmt.Sprintf(eventLogGraphQuery, fetchHeightFloor, fetchHeightCell)), &graphQLResponse)
+
+			err = ef.graphClient.Run(ctx, graphql.NewRequest(fmt.Sprintf(ef.logFiltersQuery, fetchHeightFloor, fetchHeightCell)), &graphQLResponse)
 			cancel()
 			if err != nil {
 				logrus.Errorf("subscribeEvents, network: %d, graph query error: %s", ef.networkId, err.Error())
 				continue
 			}
 
-			for _, block := range graphQLResponse.Blocks {
-				var blockNumber uint64
-				switch reflect.TypeOf(block.Number).Kind() {
-				case reflect.Float64:
-					blockNumber = uint64(block.Number.(float64))
-				case reflect.String:
-					blockNumber, err = strconv.ParseUint(block.Number.(string), 0, 64)
-					if err != nil {
-						logrus.Errorf("invalid string block height, %s\n", block.Number.(string))
-						goto endLoop
-					}
-				default:
-					logrus.Errorf("invalid block height, %v\n", block.Number)
-					goto endLoop
-				}
+			// avoid updating a row at the same time,otherwise it may be deadlock. between mysql transaction and event handler loop control
+			mutex.Lock()
 
-				logrus.Infoln("subscribeEvents fetch new block ", blockNumber)
-
-				// avoid updating a row at the same time,otherwise it may be deadlock. between mysql transaction and event handler loop control
-				mutex.Lock()
-
-				if err := ef.synchronizeProgressRecorder.startRecord(blockNumber); err != nil {
-					logrus.Errorf("subscribeEvents, network: %d, record error: %s", ef.networkId, err.Error())
-					mutex.Unlock()
-					goto endLoop
-				}
-
-				for _, transaction := range block.Transactions {
-					for _, eventLog := range transaction.Logs {
-						if len(eventLog.Topics) == 0 {
-							continue
-						}
-
-						if len(eventLog.Data) > logDataMaxLength {
-							logrus.Infof("subscribeEvents fetch new event log, hash: %s, address: %s, topics: %v, data: %s...", transaction.Hash, eventLog.Account.Address, eventLog.Topics, eventLog.Data[:logDataMaxLength])
-						} else {
-							logrus.Infof("subscribeEvents fetch new event log, hash: %s, address: %s, topics: %v, data: %s...", transaction.Hash, eventLog.Account.Address, eventLog.Topics, eventLog.Data)
-						}
-
-						logEvent := &LogEvent{
-							Topic:           eventLog.Topics[0],
-							Data:            eventLog.Data,
-							blockNumber:     blockNumber,
-							transactionHash: transaction.Hash,
-							networkId:       ef.networkId,
-						}
-
-						if len(eventLog.Topics) > 1 {
-							logEvent.Args = eventLog.Topics[1:]
-						}
-
-						event <- logEvent
-						// wait for all sql completed
-						<-nextSignal
-					}
-				}
-
-				reason, err := ef.synchronizeProgressRecorder.autoCommitRecord()
-				if err != nil {
-					logrus.Errorf("data record commit error. block height: %d error message: %s\n", blockNumber, err.Error())
-				} else if reason != "" {
-					logrus.Errorf("data rollback. block height: %d rollback reason: %s\n", blockNumber, reason)
-				}
-
+			if err := ef.synchronizeProgressRecorder.startRecord(); err != nil {
+				logrus.Errorf("subscribeEvents, network: %d, record error: %s", ef.networkId, err.Error())
 				mutex.Unlock()
+				goto endLoop
 			}
 
-		endLoop:
+			for _, eventLog := range graphQLResponse.Logs {
+
+				if len(eventLog.Topics) == 0 {
+					continue
+				}
+
+				if len(eventLog.Data) > logDataMaxLength {
+					logrus.Infof("subscribeEvents fetch new event log, hash: %s, address: %s, topics: %v, data: %s...", eventLog.Transaction.Hash, eventLog.Account.Address, eventLog.Topics, eventLog.Data[:logDataMaxLength])
+				} else {
+					logrus.Infof("subscribeEvents fetch new event log, hash: %s, address: %s, topics: %v, data: %s...", eventLog.Transaction.Hash, eventLog.Account.Address, eventLog.Topics, eventLog.Data)
+				}
+
+				logEvent := &LogEvent{
+					Topic:           eventLog.Topics[0],
+					Data:            eventLog.Data,
+					blockNumber:     eventLog.Transaction.Block.Number,
+					transactionHash: eventLog.Transaction.Hash,
+					networkId:       ef.networkId,
+				}
+				if len(eventLog.Topics) > 1 {
+					logEvent.Args = eventLog.Topics[1:]
+				}
+
+				event <- logEvent
+				// wait for all sql completed
+				<-nextSignal
+			}
+
+			reason, err := ef.synchronizeProgressRecorder.autoCommitRecord(fetchHeightCell)
+			if err != nil {
+				logrus.Errorf("data record commit error. block height: %d-%d error message: %s", fetchHeightFloor, fetchHeightCell, err.Error())
+			} else if reason != "" {
+				logrus.Errorf("data rollback. block height: %d-%d rollback reason: %s", fetchHeightFloor, fetchHeightCell, reason)
+			} else {
+				logrus.Infof("subscribeEvents fetch new logs from: %d to: %d", fetchHeightFloor, fetchHeightCell)
+			}
+
+			mutex.Unlock()
 		}
+
+	endLoop:
 	}
 }
 
@@ -283,7 +287,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 		}
 
 		if chain.Graph == "" {
-			eventSubscriber, err = NewEventFetchThroughRpc(rpcClient, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
+			eventSubscriber, err = NewEventFetchThroughRpc(rpcClient, chain.BridgeContract20, chain.BridgeContract721, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
 			if err != nil {
 				logrus.Fatalln(err)
 			}
@@ -292,7 +296,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 			if config.Debug() {
 				graphClient.Log = graphLog
 			}
-			eventSubscriber, err = NewEventFetchThroughGraphQL(rpcClient, graphClient, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
+			eventSubscriber, err = NewEventFetchThroughGraphQL(rpcClient, graphClient, chain.BridgeContract20, chain.BridgeContract721, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
 			if err != nil {
 				logrus.Fatalln(err)
 			}
@@ -303,7 +307,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 			logrus.Fatalln(err)
 		}
 
-		if err := registerNodeClients(networkId(chain.NetworkId), chain.BridgeContract721, chain.BridgeContract20, rpcClient, chain.AdminAddress, signer.Signer, signer.SignMintErc20); err != nil {
+		if err := registerNodeClients(networkId(chain.NetworkId), chain.BridgeContract721, chain.BridgeContract20, chain.RpcUrl, rpcClient, chain.AdminAddress, signer.Signer, signer.SignMintErc20, signer.SignMintErc20S); err != nil {
 			logrus.Fatalln(err)
 		}
 
@@ -322,9 +326,18 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 		if _, found := erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name]; !found {
 			erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name] = make([]*Erc20ContractAddress, 0)
 		}
+
+		minimumFee := big.NewInt(0)
+		var ok bool
+
+		minimumFee, ok = new(big.Int).SetString(erc20ContractPairsConfiguration[i].MinFee, 0)
+		if !ok {
+			logrus.Errorf("invalid minimum fee %s", erc20ContractPairsConfiguration[i].MinFee)
+		}
 		erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name] = append(erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name], &Erc20ContractAddress{
 			NetworkId:       networkId(erc20ContractPairsConfiguration[i].NetworkId),
 			ContractAddress: strings.ToLower(erc20ContractPairsConfiguration[i].ContractAddress),
+			MinimumFee:      minimumFee,
 		})
 	}
 

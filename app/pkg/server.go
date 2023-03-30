@@ -56,6 +56,6 @@ func NewServer(endpoints []string) *Server {
 }
 
 func (s *Server) Start() {
-	logrus.Infof("start to listen %s", config.Listen())
-	_ = s.engine.Run(config.Listen())
+	logrus.Infof("start to listen 0.0.0.0:80")
+	_ = s.engine.Run("0.0.0.0:80")
 }

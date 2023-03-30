@@ -43,6 +43,7 @@ type BridgeHistory struct {
 	ProtocolType               Protocol `json:"protocolType"`
 	Erc20BurnId                string   `json:"erc20BurnId"`
 	Erc20Amount                string   `json:"erc20Amount"`
+	Fee                        string   `json:"fee"`
 }
 
 type Erc721BridgeContractAddress struct {
@@ -50,6 +51,7 @@ type Erc721BridgeContractAddress struct {
 	NetworkId uint64
 	Address   string
 	Symbol    string
+	Name      string
 	Icon      string
 }
 
@@ -71,4 +73,5 @@ type Erc20BridgeContractAddress struct {
 	ContractIcon    string
 	MinBurn         string
 	MaxBurn         string
+	MinFee          string
 }
