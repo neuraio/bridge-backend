@@ -9,7 +9,7 @@ import (
 )
 
 const graphqlEndpoint = `https://testnet.ankr.com/graphql`
-const rpcEndpoint = `https://testnet.ankr.com`
+const rpcEndpoint = `https://rpc.ankr.com/polygon_mumbai/128bdedab70a53096c6b5132d94384254aee84b8491502b928ab6c08652a7b78`
 
 func TestNewEventFetchThroughGraphQL(t *testing.T) {
 

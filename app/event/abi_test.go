@@ -9,13 +9,13 @@ import (
 	"testing"
 )
 
-const destinationNetworkId = 12077
+const destinationNetworkId = 80001
 const bridgeAddressNft = "0xc09d350573715CD441791603c4F01a59Dd832699"
-const bridgeAddressFt = "0x21a4813D3A13fD762d00FC3551D67553453c5c19"
+const bridgeAddressFt = "0x083DDdD02835385A239b710648f33781B15Cc3C0"
 const adminAddress = "0xdab136D1AAceF7417D32ae6B8b13651dbA4Dd580"
 
 func mockNodes(t *testing.T) {
-	rpcClient, err := ethclient.Dial("https://testnet.ankr.com")
+	rpcClient, err := ethclient.Dial(rpcEndpoint)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,13 +71,13 @@ func TestMintTokens(t *testing.T) {
 	mockNodes(t)
 	bridges := make([]*ercBridge, 0)
 	bridges = append(bridges, &ercBridge{
-		sourceNetworkId:            97,
-		burnId:                     "0x8250c44bb4b5c670e16d696bf706c55df519688a8ab11eb6ea0778db7b729a33",
-		destinationContractAddress: "0x05ecb110a232161fbf719e5889a95e42ca0be154",
-		senderAddress:              "0x5257ad0c2dCFfCC0B3a30eAed151E76fF441Eb60",
-		receiverAddress:            "0x5257ad0c2dCFfCC0B3a30eAed151E76fF441Eb60",
-		amountS:                    "3000000000000000000",
-		feeS:                       "6000000000000000",
+		sourceNetworkId:            12077,
+		burnId:                     "0x8607914fb244e6dfc4f81237cd9b4d82d2f02cb352e78609b7ec9ed6bba704b7",
+		destinationContractAddress: "0x82f708bffb087681b81a69b9b665ea863448829f",
+		senderAddress:              "0xb5Dd9E01F02554a6C3d397d0Fd878043e9fa9574",
+		receiverAddress:            "0xb5Dd9E01F02554a6C3d397d0Fd878043e9fa9574",
+		amountS:                    "300000000000000000000",
+		feeS:                       "600000000000000000",
 	})
 	hash, err := MintTokens(destinationNetworkId, bridges)
 	if err != nil {
