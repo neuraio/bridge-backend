@@ -13,6 +13,8 @@ spec:
       labels:
         app: bridge-backend-service
     spec:
+      imagePullSecrets:
+        - name: regcred
       containers:
         - image: ankrnetwork/bridge-backend:release
           name: bridge-backend-service
