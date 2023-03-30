@@ -54,7 +54,7 @@ steps:
   - name: deploy app PROD
     image: danielgormly/drone-plugin-kube:0.1.0
     settings:
-      template: ./k8.yaml
+      template: ./k8.yml
       ca:
         from_secret: kubernetes_ca
       server:
