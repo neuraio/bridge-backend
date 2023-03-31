@@ -25,7 +25,7 @@ spec:
               name: web
           volumeMounts:
             - name: configuration
-              mountPath: /go/src/app/app/etc
+              mountPath: /go/src/app/etc
               readOnly: true
       volumes:
         - name: configuration
