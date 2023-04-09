@@ -319,7 +319,8 @@ var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, 
 		DestinationTransactionHash: "",
 		DestinationAddress:         bridgeEvent.DestinationAddress.String(),
 
-		Erc20Amount: bridgeEvent.Amount.String(),
+		Erc20Amount:  bridgeEvent.Amount.String(),
+		DepositCount: uint64(bridgeEvent.DepositCount),
 		//Fee:         fee.String(),
 
 		Status: database.NftBridgeZKing,
