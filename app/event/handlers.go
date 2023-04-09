@@ -280,15 +280,14 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 }
 
 var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
-
 	// double check
 	if event.Topic != ZkBridgeErc20Topic {
 		return errors.New("invalid topic")
 	}
 
-	if len(event.Args) < 1 {
-		return errors.New("invalid event log lacking of args")
-	}
+	//if len(event.Args) < 1 {
+	//	return errors.New("bridgeEventZKBridgeErc20Handle invalid event log lacking of args")
+	//}
 
 	if len(event.Data) <= 2 {
 		return errors.New("invalid event log without data")
