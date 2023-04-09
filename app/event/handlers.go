@@ -27,6 +27,9 @@ const (
 	mintEventTopic       = ""
 	BridgeEventTopic     = "0xa32c8d97b98adc135b448bc36f8fd4fbdc09c4a7bd832e5e9a0510051a75f89c" //event Sent(address sender, address srcNft, uint256 tokenId, uint256 dstChId, address reciver, address dstNft)
 	BridgeBurnErc20Topic = "0x50e22ad3fc6c213f811692f757b38468af04f08c4377a69004aaf21c7f04485b" //event Burned(bytes32 indexed burnId, address sender, address receiver, address token, uint256 amount, uint256 dstChainId, uint256 nonce)
+
+	ZkBridgeErc20Topic = "0x501781209a1f8899323b96b4ef08b168df93e0a90c673d1e4cce39366cb62f9b" //event BridgeEvent (uint8 leafType, uint32 originNetwork, address originAddress, uint32 destinationNetwork, address destinationAddress, uint256 amount, bytes metadata, uint32 depositCount)
+	ZkClaimErc20Topic  = "0x25308c93ceeed162da955b3f7ce3e3f93606579e40fb92029faa9efe27545983" //event ClaimEvent (uint32 index, uint32 originNetwork, address originAddress, address destinationAddress, uint256 amount)
 )
 
 type Erc20ContractAddress struct {
@@ -171,6 +174,156 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 		Fee:         fee.String(),
 
 		Status: database.NftBridgeUndo,
+	}
+
+	logrus.Debugf("erc20 bridgeEventHandle %v", recorder)
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+
+	return mysqlClient.Save(recorder).Error
+}
+
+//bridgeEvent.             claimEvent
+//
+//depositCount     =        index
+//originNetwork    =        originNetwork
+//originAddress    =        originAddress
+//destinationAddress = destinationAddress
+//amount                    = amount
+
+var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	// double check
+	if event.Topic != ZkClaimErc20Topic {
+		return errors.New("invalid topic")
+	}
+
+	//if len(event.Args) < 1 {
+	//	return errors.New("invalid event log lacking of args")
+	//}
+
+	if len(event.Data) <= 2 {
+		return errors.New("invalid event log without data")
+	}
+
+	// deserialization
+	bridgeEvent := new(bridge.PolygonZkEVMBridgeClaimEvent)
+	hexData, err := hex.DecodeString(event.Data[2:])
+	if err != nil {
+		return err
+	}
+
+	if err := abiObject20.UnpackIntoInterface(bridgeEvent, "ClaimEvent", hexData); err != nil {
+		return err
+	}
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+	oldRecord := &database.BridgeHistory{}
+	if err := mysqlClient.Where(&database.BridgeHistory{
+		DepositCount:          uint64(bridgeEvent.Index),
+		SourceNetworkId:       int(bridgeEvent.OriginNetwork),
+		SourceContractAddress: bridgeEvent.OriginAddress.String(),
+		DestinationAddress:    bridgeEvent.DestinationAddress.String(),
+		Erc20Amount:           bridgeEvent.Amount.String(),
+	}).First(&oldRecord).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+	}
+	if oldRecord.ID == 0 {
+		recorder := &database.BridgeHistory{
+			ProtocolType: database.Erc20,
+
+			SourceNetworkId:       int(bridgeEvent.OriginNetwork),
+			SourceContractAddress: bridgeEvent.OriginAddress.String(),
+			//SourceBlockHeight:     event.blockNumber,
+			//SourceTransactionHash: event.transactionHash,
+			//SourceAddress: bridgeEvent.Sender.Hex(),
+			DestinationNetworkId: int(event.networkId),
+			//DestinationContractAddress: ,
+			DestinationBlockHeight:     event.blockNumber,
+			DestinationTransactionHash: event.transactionHash,
+			DestinationAddress:         bridgeEvent.OriginAddress.String(),
+
+			Erc20Amount: bridgeEvent.Amount.String(),
+
+			Status: database.NftBridgeZKDepositSlow,
+		}
+
+		logrus.Debugf("erc20 bridgeEventHandle %v", recorder)
+
+		return mysqlClient.Save(recorder).Error
+	}
+	recorder := &database.BridgeHistory{
+		ProtocolType: database.Erc20,
+
+		//SourceNetworkId:       int(bridgeEvent.OriginNetwork),
+		//SourceContractAddress: bridgeEvent.OriginAddress.String(),
+		//SourceBlockHeight:     event.blockNumber,
+		//SourceTransactionHash: event.transactionHash,
+		//SourceAddress: bridgeEvent.Sender.Hex(),
+		DestinationNetworkId: int(event.networkId),
+		//DestinationContractAddress: ,
+		DestinationBlockHeight:     event.blockNumber,
+		DestinationTransactionHash: event.transactionHash,
+		//DestinationAddress:         bridgeEvent.OriginAddress.String(),
+
+		Erc20Amount: bridgeEvent.Amount.String(),
+		Status:      database.NftBridgeSuccess,
+	}
+	return mysqlClient.Updates(recorder).Where("id = ?", oldRecord.ID).Error
+}
+
+var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+
+	// double check
+	if event.Topic != ZkBridgeErc20Topic {
+		return errors.New("invalid topic")
+	}
+
+	if len(event.Args) < 1 {
+		return errors.New("invalid event log lacking of args")
+	}
+
+	if len(event.Data) <= 2 {
+		return errors.New("invalid event log without data")
+	}
+
+	// deserialization
+	bridgeEvent := new(bridge.PolygonZkEVMBridgeBridgeEvent)
+	hexData, err := hex.DecodeString(event.Data[2:])
+	if err != nil {
+		return err
+	}
+
+	if err := abiObject20.UnpackIntoInterface(bridgeEvent, "BridgeEvent", hexData); err != nil {
+		return err
+	}
+
+	recorder := &database.BridgeHistory{
+		ProtocolType: database.Erc20,
+
+		SourceNetworkId:       int(event.networkId),
+		SourceContractAddress: bridgeEvent.OriginAddress.String(),
+		SourceBlockHeight:     event.blockNumber,
+		SourceTransactionHash: event.transactionHash,
+		//SourceAddress:         "",
+
+		//DestinationNetworkId:       ,
+		DestinationContractAddress: "",
+		DestinationBlockHeight:     0,
+		DestinationTransactionHash: "",
+		DestinationAddress:         bridgeEvent.DestinationAddress.String(),
+
+		Erc20Amount: bridgeEvent.Amount.String(),
+		//Fee:         fee.String(),
+
+		Status: database.NftBridgeZKing,
 	}
 
 	logrus.Debugf("erc20 bridgeEventHandle %v", recorder)

@@ -14,6 +14,9 @@ const (
 	NftBridgeRefundPending
 	NftBridgeRefundSuccess
 	NftBridgeRefundFail
+	NftBridgeZKing
+	NftBridgeZKSuccess
+	NftBridgeZKDepositSlow
 )
 
 type Protocol string
@@ -44,6 +47,8 @@ type BridgeHistory struct {
 	Erc20BurnId                string   `json:"erc20BurnId"`
 	Erc20Amount                string   `json:"erc20Amount"`
 	Fee                        string   `json:"fee"`
+
+	DepositCount uint64 // ZK Bridge attribute
 }
 
 type Erc721BridgeContractAddress struct {

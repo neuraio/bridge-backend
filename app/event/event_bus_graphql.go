@@ -66,8 +66,7 @@ type FetchThroughGraphQL struct {
 	synchronizeProgressRecorder synchronizeProgressRecord
 }
 
-func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graphql.Client, contract721, contract20 string, blockStep, blockDelay int, networkId networkId, interval time.Duration, dataRecordTransaction dataRecorderTransaction) (*FetchThroughGraphQL, error) {
-
+func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graphql.Client, addresses []string, blockStep, blockDelay int, networkId networkId, interval time.Duration, dataRecordTransaction dataRecorderTransaction) (*FetchThroughGraphQL, error) {
 	height, err := rpcClient.BlockNumber(context.Background())
 	if err != nil {
 		return nil, err
@@ -86,7 +85,7 @@ func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graph
 		blockStep:       blockStep,
 		heightDelay:     blockDelay,
 		fetchInterval:   interval,
-		logFiltersQuery: getEventLogGraphQueryWithFilters([]string{contract20, contract721}),
+		logFiltersQuery: getEventLogGraphQueryWithFilters(addresses),
 	}
 
 	if err := graphClient.Run(context.Background(), graphql.NewRequest(fmt.Sprintf(eventFetcher.logFiltersQuery, height-uint64(blockDelay), height-uint64(blockDelay-blockStep))), nil); err != nil {
@@ -136,7 +135,7 @@ func getEventLogGraphQueryWithFilters(addresses []string) string {
 		logrus.Fatalln(err)
 	}
 
-	topic, err := json.Marshal([]string{BridgeBurnErc20Topic, BridgeEventTopic})
+	topic, err := json.Marshal([]string{BridgeBurnErc20Topic, BridgeEventTopic, ZkBridgeErc20Topic, ZkClaimErc20Topic})
 	if err != nil {
 		logrus.Fatalln(err)
 	}
@@ -285,9 +284,18 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 		if err != nil {
 			logrus.Fatalln(err)
 		}
-
+		addresses := make([]string, 0)
+		if chain.BridgeContract20 != "" {
+			addresses = append(addresses, chain.BridgeContract20)
+		}
+		if chain.ZKBridgeContract20 != "" {
+			addresses = append(addresses, chain.ZKBridgeContract20)
+		}
+		if chain.BridgeContract721 != "" {
+			addresses = append(addresses, chain.BridgeContract721)
+		}
 		if chain.Graph == "" {
-			eventSubscriber, err = NewEventFetchThroughRpc(rpcClient, chain.BridgeContract20, chain.BridgeContract721, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
+			eventSubscriber, err = NewEventFetchThroughRpc(rpcClient, addresses, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
 			if err != nil {
 				logrus.Fatalln(err)
 			}
@@ -296,7 +304,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 			if config.Debug() {
 				graphClient.Log = graphLog
 			}
-			eventSubscriber, err = NewEventFetchThroughGraphQL(rpcClient, graphClient, chain.BridgeContract20, chain.BridgeContract721, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
+			eventSubscriber, err = NewEventFetchThroughGraphQL(rpcClient, graphClient, addresses, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
 			if err != nil {
 				logrus.Fatalln(err)
 			}
