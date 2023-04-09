@@ -23,6 +23,7 @@ type HistoryRecordResp struct {
 	TokenID             uint64                `json:"tokenID"`
 	Status              database.BridgeStatus `json:"status"`
 	Erc20Amount         string                `json:"erc20Amount"`
+	DepositCount        uint64                `json:"depositCount"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -60,6 +61,7 @@ func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*HistoryRec
 			CreatedAt:           record.CreatedAt,
 			UpdatedAt:           record.UpdatedAt,
 			Erc20Amount:         record.Erc20Amount,
+			DepositCount:        record.DepositCount,
 		})
 	}
 
