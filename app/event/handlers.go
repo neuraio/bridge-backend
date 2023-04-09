@@ -55,7 +55,7 @@ type multiplexer struct {
 }
 
 var defaultMultiplexer = multiplexer{handlers: make(map[string]eventHandler)}
-var abiObject721, abiObject20 *abi.ABI
+var abiObject721, abiObject20, abiZkObject20 *abi.ABI
 
 var _ eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
 	// double check
@@ -215,7 +215,7 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 		return err
 	}
 
-	if err := abiObject20.UnpackIntoInterface(bridgeEvent, "ClaimEvent", hexData); err != nil {
+	if err := abiZkObject20.UnpackIntoInterface(bridgeEvent, "ClaimEvent", hexData); err != nil {
 		return err
 	}
 
@@ -300,7 +300,7 @@ var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, 
 		return err
 	}
 
-	if err := abiObject20.UnpackIntoInterface(bridgeEvent, "BridgeEvent", hexData); err != nil {
+	if err := abiZkObject20.UnpackIntoInterface(bridgeEvent, "BridgeEvent", hexData); err != nil {
 		return err
 	}
 	logrus.Debugf("erc20 bridgeEvent------ :+%v", bridgeEvent)
@@ -430,7 +430,11 @@ func init() {
 		panic(e)
 	}
 	abiObject20 = b
-
+	z, e := bridge.PolygonZkEVMBridgeMetaData.GetAbi()
+	if e != nil {
+		panic(e)
+	}
+	abiZkObject20 = z
 	// register handler
 	// registerHandlerFunction(mintEventTopic, mintEventHandle)
 	registerHandlerFunction(BridgeEventTopic, bridgeEventHandle)
