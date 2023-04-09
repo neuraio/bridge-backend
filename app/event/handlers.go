@@ -304,7 +304,7 @@ var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, 
 	if err := abiObject20.UnpackIntoInterface(bridgeEvent, "BridgeEvent", hexData); err != nil {
 		return err
 	}
-
+	logrus.Debugf("erc20 bridgeEvent------ :+%v", bridgeEvent)
 	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
@@ -326,7 +326,7 @@ var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, 
 		Status: database.NftBridgeZKing,
 	}
 
-	logrus.Debugf("erc20 bridgeEventHandle %v", recorder)
+	logrus.Debugf("erc20 bridgeEventHandle :+%v", recorder)
 
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
 	if !ok {
@@ -436,6 +436,7 @@ func init() {
 	// registerHandlerFunction(mintEventTopic, mintEventHandle)
 	registerHandlerFunction(BridgeEventTopic, bridgeEventHandle)
 	registerHandlerFunction(BridgeBurnErc20Topic, bridgeEventBurnErc20Handle)
+	registerHandlerFunction(ZkBridgeErc20Topic, bridgeEventZKBridgeErc20Handle)
 
 	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(10*time.Second, jobSendFtToken), cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken), cronJobWrapper(10*time.Second, jobRefundTransactionResult))
 }

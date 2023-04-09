@@ -15,7 +15,7 @@ const (
 	NftBridgeRefundSuccess
 	NftBridgeRefundFail
 	NftBridgeZKing
-	NftBridgeZKSuccess
+	NftBridgeZKSuccess // 前端成功
 	NftBridgeZKDepositSlow
 )
 

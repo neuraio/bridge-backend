@@ -40,6 +40,7 @@ func SetupRouter(e *gin.Engine) {
 	v1.GET("/bridge-pair", listBridgePair)
 	v1.GET("/bridge-fee", getBridgeFee)
 	v1.GET("/nft-contracts", getNftContracts)
+	v1.PUT("/history-records/:id", updateHistoryRecords)
 }
 
 type contractInformation struct {
@@ -270,4 +271,24 @@ func ownerOf(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response.Ok(map[string]interface{}{"owner address": owner}))
 	return
+}
+
+func updateHistoryRecords(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, response.Err(response.ErrInvalidParameter))
+		return
+	}
+	req := struct {
+		Tx string
+	}{}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, response.Err(response.ErrInvalidParameter))
+		return
+	}
+	if err := service.UpdateHistoryRecord(id, req.Tx); err != nil {
+		c.JSON(http.StatusInternalServerError, response.Err(err))
+		return
+	}
+	c.JSON(http.StatusOK, response.Ok(nil))
 }
