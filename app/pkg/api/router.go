@@ -273,15 +273,17 @@ func ownerOf(c *gin.Context) {
 	return
 }
 
+type historyRecordReq struct {
+	Tx string `json:"tx"`
+}
+
 func updateHistoryRecords(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, response.Err(response.ErrInvalidParameter))
 		return
 	}
-	req := struct {
-		Tx string
-	}{}
+	req := &historyRecordReq{}
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, response.Err(response.ErrInvalidParameter))
 		return
