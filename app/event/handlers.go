@@ -189,7 +189,6 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 //bridgeEvent.             claimEvent
 //
 //depositCount     =        index
-//originNetwork    =        originNetwork
 //originAddress    =        originAddress
 //destinationAddress = destinationAddress
 //amount                    = amount
@@ -239,7 +238,7 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 		recorder := &database.BridgeHistory{
 			ProtocolType: database.Erc20,
 
-			SourceNetworkId:       int(bridgeEvent.OriginNetwork),
+			//SourceNetworkId:       int(bridgeEvent.OriginNetwork),
 			SourceContractAddress: bridgeEvent.OriginAddress.String(),
 			//SourceBlockHeight:     event.blockNumber,
 			//SourceTransactionHash: event.transactionHash,
@@ -248,7 +247,7 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 			//DestinationContractAddress: ,
 			DestinationBlockHeight:     event.blockNumber,
 			DestinationTransactionHash: event.transactionHash,
-			DestinationAddress:         bridgeEvent.OriginAddress.String(),
+			DestinationAddress:         bridgeEvent.DestinationAddress.String(),
 
 			Erc20Amount: bridgeEvent.Amount.String(),
 
@@ -260,7 +259,8 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 		return mysqlClient.Save(recorder).Error
 	}
 	recorder := &database.BridgeHistory{
-		ProtocolType: database.Erc20,
+		Model: gorm.Model{ID: oldRecord.ID},
+		//ProtocolType: database.Erc20,
 
 		//SourceNetworkId:       int(bridgeEvent.OriginNetwork),
 		//SourceContractAddress: bridgeEvent.OriginAddress.String(),
@@ -271,12 +271,16 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 		//DestinationContractAddress: ,
 		DestinationBlockHeight:     event.blockNumber,
 		DestinationTransactionHash: event.transactionHash,
-		//DestinationAddress:         bridgeEvent.OriginAddress.String(),
+		DestinationAddress:         bridgeEvent.DestinationAddress.String(),
 
 		//Erc20Amount: bridgeEvent.Amount.String(),
 		Status: database.NftBridgeSuccess,
 	}
-	return mysqlClient.Updates(recorder).Where("id = ?", oldRecord.ID).Error
+
+	//return mysqlClient.Model(&database.BridgeHistory{}).Updates(map[string]interface{}{"destination_network_id": int(event.networkId),
+	//	"destination_block_height": event.blockNumber, "destination_transaction_hash": event.transactionHash,
+	//	"status": database.NftBridgeSuccess}).Where("id = ?", oldRecord.ID).Error
+	return mysqlClient.Save(recorder).Error
 }
 
 var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
