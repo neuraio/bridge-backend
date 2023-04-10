@@ -431,13 +431,39 @@ func (hf eventHandlerFunction) handle(event *LogEvent, transaction dataRecorderT
 	return hf(event, transaction)
 }
 
-func registerErc20ContractPairs(chainIds []networkId, erc20ContractMap map[string][]*Erc20ContractAddress) {
+func registerErc20ContractPairs(chainIds []networkId) {
 	erc20ContractPairsLocker.Lock()
 	defer erc20ContractPairsLocker.Unlock()
 
-	erc20ContractPairs = make([][]*Erc20ContractAddress, 0, len(erc20ContractMap))
+	erc20ContractPairsConfiguration := make([]*database.Erc20BridgeContractAddress, 0)
+	if err := database.GetMysqlClient().Find(&erc20ContractPairsConfiguration).Error; err != nil {
+		logrus.Error(err)
+		return
+	}
 
-	for name, pairs := range erc20ContractMap {
+	erc20ContractPairMap := make(map[string][]*Erc20ContractAddress, 0)
+	for i := range erc20ContractPairsConfiguration {
+		if _, found := erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name]; !found {
+			erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name] = make([]*Erc20ContractAddress, 0)
+		}
+
+		minimumFee := big.NewInt(0)
+		var ok bool
+
+		minimumFee, ok = new(big.Int).SetString(erc20ContractPairsConfiguration[i].MinFee, 0)
+		if !ok {
+			logrus.Errorf("invalid minimum fee %s", erc20ContractPairsConfiguration[i].MinFee)
+		}
+		erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name] = append(erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name], &Erc20ContractAddress{
+			NetworkId:       networkId(erc20ContractPairsConfiguration[i].NetworkId),
+			ContractAddress: strings.ToLower(erc20ContractPairsConfiguration[i].ContractAddress),
+			MinimumFee:      minimumFee,
+		})
+	}
+
+	erc20ContractPairs = make([][]*Erc20ContractAddress, 0)
+
+	for name, pairs := range erc20ContractPairMap {
 		erc20ContractPairs = append(erc20ContractPairs, make([]*Erc20ContractAddress, 0, len(pairs)))
 		for _, pair := range pairs {
 			if !containNetwork(pair.NetworkId, chainIds) {
