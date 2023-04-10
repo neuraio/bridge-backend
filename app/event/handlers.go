@@ -408,7 +408,7 @@ func getRollUpContractAddress(sourceNetwork networkId) (string, networkId) {
 		logrus.Error("getRollUpContractAddress erc20ContractPairs ==0 ")
 		return "", 0
 	}
-	logrus.Debugf("getRollUpContractAddress sourceNetwork :%d,  erc20ContractPairs:%+v", sourceNetwork, erc20ContractPairs)
+	//logrus.Debugf("getRollUpContractAddress sourceNetwork :%d,  erc20ContractPairs:%+v", sourceNetwork, erc20ContractPairs)
 	rollupContractAddress := ""
 	var dstNetworkID networkId = 0
 	for _, erc20ContractPair := range erc20ContractPairs {
@@ -609,6 +609,7 @@ func jobSendFtToken(_ context.Context) error {
 			continue
 		}
 	}
+	logrus.Debugf("jobSendFtToken networks len:%d", len(networks))
 	for network := range networks {
 		bridgeHistories := make([]*database.BridgeHistory, 0)
 		if err := database.GetMysqlClient().Where("status = ? AND protocol_type = ? AND destination_network_id = ?", database.NftBridgeUndo, database.Erc20, network).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
