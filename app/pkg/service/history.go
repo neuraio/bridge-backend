@@ -69,5 +69,5 @@ func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*HistoryRec
 }
 
 func UpdateHistoryRecord(id int, tx string) error {
-	return database.GetMysqlClient().Model(&database.BridgeHistory{}).Where("id = ?", id).Update("dest_transaction_hash", tx).Error
+	return database.GetMysqlClient().Model(&database.BridgeHistory{}).Where("id = ?", id).Update("destination_transaction_hash", tx).Error
 }
