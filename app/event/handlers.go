@@ -33,9 +33,11 @@ const (
 )
 
 type Erc20ContractAddress struct {
-	NetworkId       networkId
-	ContractAddress string
-	MinimumFee      *big.Int
+	NetworkId             networkId
+	ContractAddress       string
+	MinimumFee            *big.Int
+	RollupContractAddress string
+	DstNetworkId          networkId
 }
 
 var senderLocker = make(map[networkId]map[common.Address]*sync.Mutex)
@@ -218,17 +220,30 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 		return err
 	}
 
+	// validate our contract address
+	rollupAddress, dstNetwork := getRollUpContractAddress(event.networkId)
+	if rollupAddress == "" || dstNetwork == 0 {
+		logrus.Warnf("[Skip] bridgeEventZKClaimErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+
+	if bridgeEvent.OriginAddress.String() != rollupAddress {
+		return nil
+	}
+
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
 	}
 	oldRecord := &database.BridgeHistory{}
 	if err := mysqlClient.Where(&database.BridgeHistory{
-		DepositCount: uint64(bridgeEvent.Index),
-		//SourceNetworkId:       int(bridgeEvent.OriginNetwork),
+		DepositCount:    uint64(bridgeEvent.Index),
+		SourceNetworkId: int(dstNetwork),
+
 		SourceContractAddress: bridgeEvent.OriginAddress.String(),
 		DestinationAddress:    bridgeEvent.DestinationAddress.String(),
 		Erc20Amount:           bridgeEvent.Amount.String(),
+		DestinationNetworkId:  int(event.networkId),
 	}).First(&oldRecord).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return err
@@ -280,7 +295,6 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", oldRecord.ID).Updates(map[string]interface{}{"destination_network_id": int(event.networkId),
 		"destination_block_height": event.blockNumber, "destination_transaction_hash": event.transactionHash,
 		"status": database.NftBridgeSuccess}).Error
-	//return mysqlClient.Save(recorder).Error
 }
 
 var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
@@ -307,7 +321,17 @@ var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, 
 	if err := abiZkObject20.UnpackIntoInterface(bridgeEvent, "BridgeEvent", hexData); err != nil {
 		return err
 	}
-	logrus.Debugf("erc20 bridgeEvent------ :+%v", bridgeEvent)
+
+	rollupAddress, dstNetwork := getRollUpContractAddress(event.networkId)
+	if rollupAddress == "" || dstNetwork == 0 {
+		logrus.Warnf("[Skip] bridgeEventZKBridgeErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+
+	if bridgeEvent.OriginAddress.String() != rollupAddress {
+		return nil
+	}
+
 	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
@@ -317,7 +341,7 @@ var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, 
 		SourceTransactionHash: event.transactionHash,
 		//SourceAddress:         "",
 
-		//DestinationNetworkId:       ,
+		DestinationNetworkId:       int(dstNetwork),
 		DestinationContractAddress: "",
 		DestinationBlockHeight:     0,
 		DestinationTransactionHash: "",
@@ -376,6 +400,31 @@ func getDestinationContractAddress(sourceNetwork, destinationNetwork networkId, 
 	return destinationContractAddress, destinationContractMinimumFee
 }
 
+func getRollUpContractAddress(sourceNetwork networkId) (string, networkId) {
+	erc20ContractPairsLocker.Lock()
+	defer erc20ContractPairsLocker.Unlock()
+
+	if len(erc20ContractPairs) == 0 {
+		logrus.Error("getRollUpContractAddress erc20ContractPairs ==0 ")
+		return "", 0
+	}
+	logrus.Debugf("getRollUpContractAddress sourceNetwork :%d,  erc20ContractPairs:%+v", sourceNetwork, erc20ContractPairs)
+	rollupContractAddress := ""
+	var dstNetworkID networkId = 0
+	for _, erc20ContractPair := range erc20ContractPairs {
+		for j := range erc20ContractPair {
+			if erc20ContractPair[j].NetworkId == sourceNetwork && erc20ContractPair[j].RollupContractAddress != "" {
+				rollupContractAddress = erc20ContractPair[j].RollupContractAddress
+				dstNetworkID = erc20ContractPair[j].DstNetworkId
+			}
+		}
+	}
+	if rollupContractAddress == "" || dstNetworkID == 0 {
+		return "", 0
+	}
+	return rollupContractAddress, dstNetworkID
+}
+
 var cronJobs = make([]cronJobFunction, 0)
 
 func (hf eventHandlerFunction) handle(event *LogEvent, transaction dataRecorderTransaction) error {
@@ -396,9 +445,11 @@ func registerErc20ContractPairs(chainIds []networkId, erc20ContractMap map[strin
 				continue
 			}
 			erc20ContractPairs[len(erc20ContractPairs)-1] = append(erc20ContractPairs[len(erc20ContractPairs)-1], &Erc20ContractAddress{
-				NetworkId:       pair.NetworkId,
-				ContractAddress: pair.ContractAddress,
-				MinimumFee:      pair.MinimumFee,
+				NetworkId:             pair.NetworkId,
+				ContractAddress:       pair.ContractAddress,
+				MinimumFee:            pair.MinimumFee,
+				RollupContractAddress: pair.RollupContractAddress,
+				DstNetworkId:          pair.DstNetworkId,
 			})
 		}
 	}
