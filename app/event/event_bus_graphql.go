@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ApeGame/bridge-backend/app/pkg/node/tools"
-	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -324,38 +323,13 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 		go eventSubscriber.subscribeEvents(eventLog, nextSignal)
 	}
 
-	erc20ContractPairsConfiguration := make([]*database.Erc20BridgeContractAddress, 0)
-	if err := database.GetMysqlClient().Find(&erc20ContractPairsConfiguration).Error; err != nil {
-		panic(err)
-	}
-
-	erc20ContractPairMap := make(map[string][]*Erc20ContractAddress, 0)
-	for i := range erc20ContractPairsConfiguration {
-		if _, found := erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name]; !found {
-			erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name] = make([]*Erc20ContractAddress, 0)
-		}
-
-		minimumFee := big.NewInt(0)
-		var ok bool
-
-		minimumFee, ok = new(big.Int).SetString(erc20ContractPairsConfiguration[i].MinFee, 0)
-		if !ok {
-			logrus.Errorf("invalid minimum fee %s", erc20ContractPairsConfiguration[i].MinFee)
-		}
-		erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name] = append(erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name], &Erc20ContractAddress{
-			NetworkId:       networkId(erc20ContractPairsConfiguration[i].NetworkId),
-			ContractAddress: strings.ToLower(erc20ContractPairsConfiguration[i].ContractAddress),
-			MinimumFee:      minimumFee,
-		})
-	}
-
 	ticker := time.NewTicker(time.Minute)
 
 	go func() {
 		for true {
 			select {
 			case <-ticker.C:
-				registerErc20ContractPairs(networkIds, erc20ContractPairMap)
+				registerErc20ContractPairs(networkIds)
 			}
 		}
 	}()
