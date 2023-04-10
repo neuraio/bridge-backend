@@ -225,8 +225,8 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 	}
 	oldRecord := &database.BridgeHistory{}
 	if err := mysqlClient.Where(&database.BridgeHistory{
-		DepositCount:          uint64(bridgeEvent.Index),
-		SourceNetworkId:       int(bridgeEvent.OriginNetwork),
+		DepositCount: uint64(bridgeEvent.Index),
+		//SourceNetworkId:       int(bridgeEvent.OriginNetwork),
 		SourceContractAddress: bridgeEvent.OriginAddress.String(),
 		DestinationAddress:    bridgeEvent.DestinationAddress.String(),
 		Erc20Amount:           bridgeEvent.Amount.String(),
@@ -273,8 +273,8 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 		DestinationTransactionHash: event.transactionHash,
 		//DestinationAddress:         bridgeEvent.OriginAddress.String(),
 
-		Erc20Amount: bridgeEvent.Amount.String(),
-		Status:      database.NftBridgeSuccess,
+		//Erc20Amount: bridgeEvent.Amount.String(),
+		Status: database.NftBridgeSuccess,
 	}
 	return mysqlClient.Updates(recorder).Where("id = ?", oldRecord.ID).Error
 }
@@ -441,6 +441,7 @@ func init() {
 	registerHandlerFunction(BridgeEventTopic, bridgeEventHandle)
 	registerHandlerFunction(BridgeBurnErc20Topic, bridgeEventBurnErc20Handle)
 	registerHandlerFunction(ZkBridgeErc20Topic, bridgeEventZKBridgeErc20Handle)
+	registerHandlerFunction(ZkClaimErc20Topic, bridgeEventZKClaimErc20Handle)
 
 	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(10*time.Second, jobSendFtToken), cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken), cronJobWrapper(10*time.Second, jobRefundTransactionResult))
 }
