@@ -71,12 +71,14 @@ type SynchronizationProgressRecord struct {
 
 type Erc20BridgeContractAddress struct {
 	gorm.Model
-	Name            string
-	NetworkId       uint64
-	ContractAddress string
-	ContractName    string
-	ContractIcon    string
-	MinBurn         string
-	MaxBurn         string
-	MinFee          string
+	Name                  string
+	NetworkId             uint64
+	ContractAddress       string
+	ContractName          string
+	ContractIcon          string
+	MinBurn               string
+	MaxBurn               string
+	MinFee                string
+	RollupContractAddress string
+	DstNetworkId          uint64
 }

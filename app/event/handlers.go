@@ -455,9 +455,11 @@ func registerErc20ContractPairs(chainIds []networkId) {
 			logrus.Errorf("invalid minimum fee %s", erc20ContractPairsConfiguration[i].MinFee)
 		}
 		erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name] = append(erc20ContractPairMap[erc20ContractPairsConfiguration[i].Name], &Erc20ContractAddress{
-			NetworkId:       networkId(erc20ContractPairsConfiguration[i].NetworkId),
-			ContractAddress: strings.ToLower(erc20ContractPairsConfiguration[i].ContractAddress),
-			MinimumFee:      minimumFee,
+			NetworkId:             networkId(erc20ContractPairsConfiguration[i].NetworkId),
+			ContractAddress:       strings.ToLower(erc20ContractPairsConfiguration[i].ContractAddress),
+			MinimumFee:            minimumFee,
+			RollupContractAddress: erc20ContractPairsConfiguration[i].RollupContractAddress,
+			DstNetworkId:          networkId(erc20ContractPairsConfiguration[i].DstNetworkId),
 		})
 	}
 
