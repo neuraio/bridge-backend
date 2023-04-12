@@ -2,6 +2,7 @@ package event
 
 import (
 	"errors"
+	"fmt"
 	"github.com/ApeGame/bridge-backend/app/database"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -41,6 +42,8 @@ func (s synchronizeProgressMysqlRecorder) autoCommitRecord(height uint64) (strin
 		logrus.Errorf("update block height %d  %s", height, err.Error())
 		s.mysqlDatabaseClient.setError(err)
 	}
+	fmt.Println("------test rollback-------", s.dataModel.BlockHeight)
+
 	return s.mysqlDatabaseClient.autoCommit()
 }
 
@@ -118,6 +121,7 @@ func (d *dataRecorderMysqlTransaction) autoCommit() (string, error) {
 	if d.err == nil {
 		return "", d.mysqlTransaction.Commit().Error
 	}
+	fmt.Println("------test rollback---r----", d.err)
 	return d.err.Error(), d.mysqlTransaction.Rollback().Error
 }
 
