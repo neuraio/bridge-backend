@@ -139,8 +139,7 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 		return err
 	}
 
-	if err := abiObject20.UnpackIntoInterface(bridgeEvent, "Burned11", hexData); err != nil {
-		fmt.Println("------test rollback-------", err)
+	if err := abiObject20.UnpackIntoInterface(bridgeEvent, "Burned", hexData); err != nil {
 		return err
 	}
 

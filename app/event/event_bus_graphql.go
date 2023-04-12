@@ -165,7 +165,14 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 			fetchHeightFloor := latestHeightRecorded + 1
 			fetchHeightCell := fetchHeightFloor + uint64(ef.blockStep) - 1
 
-			height, err := ef.ethClient.BlockNumber(context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			height, err := ef.ethClient.BlockNumber(ctx)
+			if ef.networkId == 80001 {
+				chainId, _ := ef.ethClient.ChainID(context.Background())
+				nid, _ := ef.ethClient.NetworkID(context.Background())
+				fmt.Println("subscribeEvents 80001", height, err, chainId.Uint64(), nid.Uint64())
+			}
+			cancel()
 			if err != nil {
 				logrus.Errorf("subscribeEvents, network: %d, get latest height from block chain error: %s", ef.networkId, err.Error())
 				continue
@@ -187,8 +194,10 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 			waitForNetworkSynchronization = 0
 
 			var graphQLResponse eventLogGraphQueryResponseModel
+			ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 
-			err = ef.graphClient.Run(context.Background(), graphql.NewRequest(fmt.Sprintf(ef.logFiltersQuery, fetchHeightFloor, fetchHeightCell)), &graphQLResponse)
+			err = ef.graphClient.Run(ctx, graphql.NewRequest(fmt.Sprintf(ef.logFiltersQuery, fetchHeightFloor, fetchHeightCell)), &graphQLResponse)
+			cancel()
 			if err != nil {
 				logrus.Errorf("subscribeEvents, network: %d, graph query error: %s", ef.networkId, err.Error())
 				continue
