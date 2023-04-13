@@ -314,7 +314,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 		logrus.Infoln("event subscriber start: ", chain.NetworkId)
 		networkIds = append(networkIds, networkId(chain.NetworkId))
 		startSignal := make(chan struct{})
-		startSignals = append(startSignals)
+		startSignals = append(startSignals, startSignal)
 		go eventSubscriber.subscribeEvents(eventLog, nextSignal, startSignal)
 	}
 
