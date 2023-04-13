@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
+	"os"
 )
 
 func init() {
@@ -17,6 +18,7 @@ func init() {
 	}
 	logrus.SetFormatter(&formatter)
 	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetOutput(os.Stdout)
 }
 
 type Server struct {
