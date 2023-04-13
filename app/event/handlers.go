@@ -369,7 +369,7 @@ func getDestinationContractAddress(sourceNetwork, destinationNetwork networkId, 
 	defer erc20ContractPairsLocker.Unlock()
 
 	if len(erc20ContractPairs) == 0 {
-		logrus.Error("getDestinationContractAddress erc20ContractPairs ==0 ")
+		logrus.Error("getDestinationContractAddress erc20ContractPairs empty ")
 		return "", nil
 	}
 	logrus.Debugf("getDestinationContractAddress sourceNetwork :%d, sourceContractAddress:%s, destinationNetwork:%d, erc20ContractPairs:%+v", sourceNetwork, sourceContractAddress, destinationNetwork, erc20ContractPairs)

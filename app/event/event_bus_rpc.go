@@ -57,7 +57,10 @@ func NewEventFetchThroughRpc(rpcClient *ethclient.Client, addresses []string, bl
 	}, nil
 }
 
-func (ef *eventFetchThroughRpc) subscribeEvents(event chan *LogEvent, nextSignal chan struct{}) {
+func (ef *eventFetchThroughRpc) subscribeEvents(event chan *LogEvent, nextSignal chan struct{}, startSignal chan struct{}) {
+
+	<-startSignal
+
 	ticker := time.NewTicker(ef.fetchInterval)
 
 	var waitForNetworkSynchronization = 0

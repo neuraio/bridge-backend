@@ -51,7 +51,7 @@ type LogEvent struct {
 }
 
 type eventSubscriber interface {
-	subscribeEvents(event chan *LogEvent, nextSignal chan struct{})
+	subscribeEvents(event chan *LogEvent, nextSignal, startSignal chan struct{})
 }
 
 type FetchThroughGraphQL struct {
@@ -148,7 +148,9 @@ func getEventLogGraphQueryWithFilters(addresses []string) string {
 }
 
 // this method will block
-func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal chan struct{}) {
+func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal chan struct{}, startSignal chan struct{}) {
+	<-startSignal
+
 	ticker := time.NewTicker(ef.fetchInterval)
 
 	var waitForNetworkSynchronization = 0
@@ -256,6 +258,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 
 	// get erc20ContractPairs
 	networkIds := make([]networkId, 0)
+	startSignals := make([]chan struct{}, 0)
 
 	for _, chain := range config.GetChainCfg() {
 
@@ -310,7 +313,15 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 
 		logrus.Infoln("event subscriber start: ", chain.NetworkId)
 		networkIds = append(networkIds, networkId(chain.NetworkId))
-		go eventSubscriber.subscribeEvents(eventLog, nextSignal)
+		startSignal := make(chan struct{})
+		startSignals = append(startSignals)
+		go eventSubscriber.subscribeEvents(eventLog, nextSignal, startSignal)
+	}
+
+	// init contracts configuration and start handle events
+	registerErc20ContractPairs(networkIds)
+	for i := 0; i < len(startSignals); i++ {
+		close(startSignals[i])
 	}
 
 	ticker := time.NewTicker(time.Minute)
@@ -323,7 +334,6 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 			}
 		}
 	}()
-
 }
 
 func StartEventSystem() {
