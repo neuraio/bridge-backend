@@ -23,7 +23,7 @@ type eventFetchThroughRpc struct {
 	synchronizeProgressRecorder synchronizeProgressRecord
 }
 
-func NewEventFetchThroughRpc(rpcClient *ethclient.Client, contract721, contract20 string, blockStep, blockDelay int, networkId networkId, interval time.Duration, dataRecordTransaction dataRecorderTransaction) (*eventFetchThroughRpc, error) {
+func NewEventFetchThroughRpc(rpcClient *ethclient.Client, addresses []string, blockStep, blockDelay int, networkId networkId, interval time.Duration, dataRecordTransaction dataRecorderTransaction) (*eventFetchThroughRpc, error) {
 
 	height, err := rpcClient.BlockNumber(context.Background())
 	if err != nil {
@@ -35,6 +35,11 @@ func NewEventFetchThroughRpc(rpcClient *ethclient.Client, contract721, contract2
 	if height < uint64(blockDelay) {
 		return nil, errors.New("the latest block height is lower than blocks delay")
 	}
+	//address := []common.Address{common.HexToAddress(contract20), common.HexToAddress(contract721)}
+	logAddresses := make([]common.Address, 0)
+	for _, address := range addresses {
+		logAddresses = append(logAddresses, common.HexToAddress(address))
+	}
 
 	return &eventFetchThroughRpc{
 		networkId: networkId,
@@ -42,8 +47,8 @@ func NewEventFetchThroughRpc(rpcClient *ethclient.Client, contract721, contract2
 		logFilter: ethereum.FilterQuery{
 			FromBlock: new(big.Int),
 			ToBlock:   new(big.Int),
-			Addresses: []common.Address{common.HexToAddress(contract20), common.HexToAddress(contract721)},
-			Topics:    [][]common.Hash{{common.HexToHash(BridgeEventTopic), common.HexToHash(BridgeBurnErc20Topic)}},
+			Addresses: logAddresses,
+			Topics:    [][]common.Hash{{common.HexToHash(BridgeEventTopic), common.HexToHash(BridgeBurnErc20Topic), common.HexToHash(ZkBridgeErc20Topic), common.HexToHash(ZkClaimErc20Topic)}},
 		},
 		blockStep:                   blockStep,
 		heightDelay:                 blockDelay,
@@ -52,7 +57,10 @@ func NewEventFetchThroughRpc(rpcClient *ethclient.Client, contract721, contract2
 	}, nil
 }
 
-func (ef *eventFetchThroughRpc) subscribeEvents(event chan *LogEvent, nextSignal chan struct{}) {
+func (ef *eventFetchThroughRpc) subscribeEvents(event chan *LogEvent, nextSignal chan struct{}, startSignal chan struct{}) {
+
+	<-startSignal
+
 	ticker := time.NewTicker(ef.fetchInterval)
 
 	var waitForNetworkSynchronization = 0

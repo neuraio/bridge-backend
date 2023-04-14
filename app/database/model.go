@@ -14,6 +14,8 @@ const (
 	NftBridgeRefundPending
 	NftBridgeRefundSuccess
 	NftBridgeRefundFail
+	NftBridgeZKing
+	NftBridgeZKDepositSlow
 )
 
 type Protocol string
@@ -44,6 +46,8 @@ type BridgeHistory struct {
 	Erc20BurnId                string   `json:"erc20BurnId"`
 	Erc20Amount                string   `json:"erc20Amount"`
 	Fee                        string   `json:"fee"`
+
+	DepositCount uint64 // ZK Bridge attribute
 }
 
 type Erc721BridgeContractAddress struct {
@@ -66,12 +70,14 @@ type SynchronizationProgressRecord struct {
 
 type Erc20BridgeContractAddress struct {
 	gorm.Model
-	Name            string
-	NetworkId       uint64
-	ContractAddress string
-	ContractName    string
-	ContractIcon    string
-	MinBurn         string
-	MaxBurn         string
-	MinFee          string
+	Name                  string
+	NetworkId             uint64
+	ContractAddress       string
+	ContractName          string
+	ContractIcon          string
+	MinBurn               string
+	MaxBurn               string
+	MinFee                string
+	RollupContractAddress string
+	DstNetworkId          uint64
 }

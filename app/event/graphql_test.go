@@ -11,6 +11,17 @@ import (
 const graphqlEndpoint = `https://testnet.ankr.com/graphql`
 const rpcEndpoint = `https://rpc.ankr.com/polygon_mumbai/128bdedab70a53096c6b5132d94384254aee84b8491502b928ab6c08652a7b78`
 
+func TestNewEventFetchThroughRpc(t *testing.T) {
+	rpcClient, err := ethclient.Dial("https://eth-goerli-do.ankr.com/rpc")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewEventFetchThroughRpc(rpcClient, []string{}, 5, 10, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNewEventFetchThroughGraphQL(t *testing.T) {
 
 	rpcClient, err := ethclient.Dial(rpcEndpoint)
@@ -23,7 +34,7 @@ func TestNewEventFetchThroughGraphQL(t *testing.T) {
 		t.Log(s)
 	}
 
-	if _, err := NewEventFetchThroughGraphQL(rpcClient, graphClient, "", "", 5, 10, 0, 0, nil); err != nil {
+	if _, err := NewEventFetchThroughGraphQL(rpcClient, graphClient, []string{}, 5, 10, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 }

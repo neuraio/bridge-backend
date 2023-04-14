@@ -15,14 +15,15 @@ type DB struct {
 }
 
 type ChainCfg struct {
-	NetworkId         int    `yaml:"NetworkId"`
-	AdminAddress      string `yaml:"AdminAddress"`
-	RpcUrl            string `yaml:"RpcUrl"`
-	Graph             string `yaml:"Graph"`
-	BlockStep         int    `yaml:"BlockStep"`
-	BlockDelay        int    `yaml:"BlockDelay"`
-	BridgeContract721 string `yaml:"BridgeContract721"`
-	BridgeContract20  string `yaml:"BridgeContract20"`
+	NetworkId          int    `yaml:"NetworkId"`
+	AdminAddress       string `yaml:"AdminAddress"`
+	RpcUrl             string `yaml:"RpcUrl"`
+	Graph              string `yaml:"Graph"`
+	BlockStep          int    `yaml:"BlockStep"`
+	BlockDelay         int    `yaml:"BlockDelay"`
+	BridgeContract721  string `yaml:"BridgeContract721"`
+	BridgeContract20   string `yaml:"BridgeContract20"`
+	ZKBridgeContract20 string `yaml:"ZKBridgeContract20"`
 }
 
 type ValutConfig struct {
