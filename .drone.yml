@@ -52,15 +52,17 @@ steps:
         - main
 
   - name: deploy app PROD
-    image: danielgormly/drone-plugin-kube:0.1.0
+    image: appleboy/drone-ssh:1.6.6-linux-amd64
     settings:
-      template: ./k8.yaml
-      ca:
-        from_secret: kubernetes_ca
-      server:
-        from_secret: kubernetes_server
-      token:
-        from_secret: kubernetes_token
+      host:
+        - 54.219.205.205
+      username: root
+      key:
+        from_secret: k8s-master1-idrsa
+      port: 22
+      command_timeout: 2m
+      script:
+        - kubectl rollout restart deployment -n bridge bridge-backend-service
     when:
       event:
         - push
