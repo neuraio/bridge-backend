@@ -227,7 +227,7 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 		return nil
 	}
 
-	if bridgeEvent.OriginAddress.String() != rollupAddress {
+	if strings.ToLower(bridgeEvent.OriginAddress.String()) != strings.ToLower(rollupAddress) {
 		return nil
 	}
 
@@ -328,7 +328,7 @@ var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, 
 		return nil
 	}
 
-	if bridgeEvent.OriginAddress.String() != rollupAddress {
+	if strings.ToLower(bridgeEvent.OriginAddress.String()) != strings.ToLower(rollupAddress) {
 		return nil
 	}
 
