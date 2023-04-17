@@ -96,6 +96,17 @@ func Erc721OwnerOfCallPost(rpcEndpoint, contractAddress string, tokenId uint64) 
 
 	return "", fmt.Errorf("invalid response body %v", result)
 }
+func Erc20BalanceOfs(rpcEndpoint string, accountAddress []string, contractAddress string) ([]*big.Int, error) {
+	balances := make([]*big.Int, 0)
+	for _, address := range accountAddress {
+		balance, err := Erc20BalanceOf(rpcEndpoint, address, contractAddress)
+		if err != nil {
+			return nil, err
+		}
+		balances = append(balances, balance)
+	}
+	return balances, nil
+}
 
 func Erc20BalanceOf(rpcEndpoint, accountAddress, contractAddress string) (*big.Int, error) {
 	logrus.Debugf("Erc20BalanceOf contract: %s,account: %s", contractAddress, accountAddress)
