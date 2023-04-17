@@ -166,17 +166,14 @@ func health(c *gin.Context) {
 				if chain.BridgeContract20 != "" {
 					bridgeContracts = append(bridgeContracts, chain.BridgeContract20)
 				}
-				if chain.ZKBridgeContract20 != "" {
-					bridgeContracts = append(bridgeContracts, chain.ZKBridgeContract20)
-				}
-				balances, err := tools.Erc20BalanceOfs(chain.RpcUrl, bridgeContracts, erc20.ContractAddress)
-				if err != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-					return
-				}
-				for _, balance := range balances {
+				for _, contract := range bridgeContracts {
+					balance, err := tools.Erc20BalanceOf(chain.RpcUrl, contract, erc20.ContractAddress)
+					if err != nil {
+						c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+						return
+					}
 					if balance.Cmp(bridgePoolLimit) == -1 {
-						failCheck = append(failCheck, fmt.Sprintf("bridge %s pool amount %s is lower than %s", chain.BridgeContract20, balance.String(), bridgePoolLimit.String()))
+						failCheck = append(failCheck, fmt.Sprintf("bridge %s pool amount %s is lower than %s", contract, balance.String(), bridgePoolLimit.String()))
 					}
 				}
 			}
