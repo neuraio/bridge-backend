@@ -225,6 +225,7 @@ func sentTo(sourceNetworkId, destinationNetworkId networkId, destinationContract
 			return "", fmt.Errorf("client.rpcClient.SuggestGasPrice error. err:%s", err.Error())
 		}
 		client.authenticator.GasPrice = gasPrice
+		client.authenticator.GasLimit = 0
 	}
 
 	transaction, err := client.contractCallerErc721.SendTo(client.authenticator, big.NewInt(int64(sourceNetworkId)), common.HexToAddress(destinationContractAddress), big.NewInt(int64(tokenId)), common.HexToAddress(receiverAddress))
