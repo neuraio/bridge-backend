@@ -21,7 +21,9 @@ func InitializeMysqlDatabase() error {
 		&Erc721BridgeContractAddress{},
 		&Erc20BridgeContractAddress{},
 		&BridgeHistory{},
-		&SynchronizationProgressRecord{}); err != nil {
+		&SynchronizationProgressRecord{},
+		&BridgeHistoryExtra{},
+	); err != nil {
 		return err
 	}
 

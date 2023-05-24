@@ -2,6 +2,7 @@ package database
 
 import (
 	"gorm.io/gorm"
+	"time"
 )
 
 type BridgeStatus int
@@ -16,6 +17,9 @@ const (
 	NftBridgeRefundFail
 	NftBridgeZKing
 	NftBridgeZKDepositSlow
+	NftBridgeDepositing         // zksync deposit
+	NftBridgeWithdrawing        // zksync withdraw
+	NftBridgeFinalizeWithdrawal // zksync finalizeWithdrawal
 )
 
 type Protocol string
@@ -23,6 +27,7 @@ type Protocol string
 const (
 	Erc20  Protocol = "erc20"
 	Erc721 Protocol = "erc721"
+	//Erc20Rollup Protocol = "erc20rollup" // eth zksync rollup
 )
 
 type BridgeHistory struct {
@@ -78,6 +83,21 @@ type Erc20BridgeContractAddress struct {
 	MinBurn               string
 	MaxBurn               string
 	MinFee                string
-	RollupContractAddress string
-	DstNetworkId          uint64
+	RollupContractAddress string // zkevm polygon eth
+	DstNetworkId          uint64 // zkevm polygon eth network id
+	LToken                string // l1 l2 token address
+	LDstNetworkId         uint64 // l1 l2 network id
+}
+
+type BridgeHistoryExtra struct {
+	ID        uint `gorm:"primaryKey;autoIncrement:false"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt *time.Time
+
+	Proof          string
+	ProofID        string
+	L1BatchNumber  string
+	L1BatchTxIndex string
+	Message        string
 }

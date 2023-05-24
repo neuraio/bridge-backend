@@ -82,6 +82,7 @@ type BridgePair struct {
 	BurnMin         string `json:"burn_min"`
 	BurnMax         string `json:"burn_max"`
 	MinimumFee      string `json:"minimum_fee"`
+	LToken          string `json:"lToken"`
 }
 
 func listBridgePair(c *gin.Context) {
@@ -104,6 +105,7 @@ func listBridgePair(c *gin.Context) {
 			BurnMin:         pair.MinBurn,
 			BurnMax:         pair.MaxBurn,
 			MinimumFee:      pair.MinFee,
+			LToken:          pair.LToken,
 		})
 	}
 

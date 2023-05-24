@@ -19,6 +19,8 @@ const erc721OwnerOfRequestBody = `{"jsonrpc":"2.0","id":7,"method":"eth_call","p
 const erc20BalanceRequestBody = `{"jsonrpc":"2.0","id":7,"method":"eth_call","params":[{"from":"0x0000000000000000000000000000000000000000","data":"0x70a08231000000000000000000000000%s","to":"%s"},"latest"]}`
 const balanceRequestBody = `{"jsonrpc":"2.0","id":7,"method":"eth_getBalance","params":["%s","latest"]}`
 
+//const balanceRequestBody = `{"jsonrpc":"2.0","id":7,"method":"eth_getBalance","params":["%s","latest"]}`
+
 var TokenNotExistError = errors.New("nonexistent token")
 
 func OwnerOfCall(rpc *ethclient.Client, contractAddress common.Address, _ uint64) error {
