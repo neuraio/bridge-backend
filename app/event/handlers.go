@@ -482,9 +482,6 @@ var bridgeEventZKSyncWithdrawBlockNumErc20Handle eventHandlerFunction = func(eve
 		return errors.New("invalid event log lacking of args")
 	}
 
-	if len(event.Data) <= 2 {
-		return errors.New("invalid event log without data")
-	}
 	height := big.NewInt(0).SetBytes(common.FromHex(event.Args[0]))
 
 	recorder := &database.SyncZkProgressRecord{
