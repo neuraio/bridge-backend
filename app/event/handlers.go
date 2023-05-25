@@ -639,6 +639,7 @@ func registerErc20ContractPairs(chainIds []networkId) {
 				MinimumFee:            pair.MinimumFee,
 				RollupContractAddress: pair.RollupContractAddress,
 				DstNetworkId:          pair.DstNetworkId,
+				LDstNetworkId:         pair.LDstNetworkId,
 			})
 		}
 	}
