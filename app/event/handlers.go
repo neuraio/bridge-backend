@@ -555,10 +555,11 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	//l2BlockNumber == l1_batch_number
 	//l2MessageIndex == proof_id
 	//l2TxNumberInBlock == l1_batch_tx_index
+
 	extra := &database.BridgeHistoryExtra{}
 	if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
-		Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", out.L2BlockNumber.Uint64(),
-			out.L2MessageIndex.Uint64(), out.L2TxNumberInBlock).First(&extra).Error; err != nil {
+		Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", hexutil.Encode(out.L2BlockNumber.Bytes()),
+			out.L2MessageIndex.Uint64(), hexutil.Encode(big.NewInt(int64(out.L2TxNumberInBlock)).Bytes())).First(&extra).Error; err != nil {
 		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle BridgeHistoryExtra error. transactionHash:%s", event.transactionHash)
 		return err
 	}
