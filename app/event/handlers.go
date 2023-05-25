@@ -96,7 +96,7 @@ var bridgeEventHandle eventHandlerFunction = func(event *LogEvent, transaction d
 		return err
 	}
 
-	recorder := &database.BridgeHistory2{
+	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc721,
 
 		SourceNetworkId:       int(event.networkId),
@@ -165,7 +165,7 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 		fee = destinationContractMinimumFee
 	}
 
-	recorder := &database.BridgeHistory2{
+	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 		Erc20BurnId:  burnId,
 
@@ -244,8 +244,8 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
 	}
-	oldRecord := &database.BridgeHistory2{}
-	if err := mysqlClient.Where(&database.BridgeHistory2{
+	oldRecord := &database.BridgeHistory{}
+	if err := mysqlClient.Where(&database.BridgeHistory{
 		DepositCount:    uint64(bridgeEvent.Index),
 		SourceNetworkId: int(dstNetwork),
 
@@ -259,7 +259,7 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 		}
 	}
 	if oldRecord.ID == 0 {
-		recorder := &database.BridgeHistory2{
+		recorder := &database.BridgeHistory{
 			ProtocolType: database.Erc20,
 
 			//SourceNetworkId:       int(bridgeEvent.OriginNetwork),
@@ -283,7 +283,7 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 		return mysqlClient.Save(recorder).Error
 	}
 
-	return mysqlClient.Model(&database.BridgeHistory2{}).Where("id = ?", oldRecord.ID).Updates(map[string]interface{}{"destination_network_id": int(event.networkId),
+	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", oldRecord.ID).Updates(map[string]interface{}{"destination_network_id": int(event.networkId),
 		"destination_block_height": event.blockNumber, "destination_transaction_hash": event.transactionHash,
 		"status": database.NftBridgeSuccess}).Error
 }
@@ -323,7 +323,7 @@ var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, 
 		return nil
 	}
 
-	recorder := &database.BridgeHistory2{
+	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
 		SourceNetworkId:       int(event.networkId),
@@ -387,7 +387,7 @@ var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent,
 	if strings.ToLower(bridgeEvent.L1Token.String()) != strings.ToLower(rollupTokenAddress) {
 		return nil
 	}
-	recorder := &database.BridgeHistory2{
+	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
 		SourceNetworkId:       int(event.networkId),
@@ -447,7 +447,7 @@ var bridgeEventZKWithdrawErc20Handle eventHandlerFunction = func(event *LogEvent
 	if strings.ToLower(event.Args[2]) != strings.ToLower(rollupTokenAddress) {
 		return nil
 	}
-	recorder := &database.BridgeHistory2{
+	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
 		SourceNetworkId:       int(event.networkId),
@@ -763,7 +763,7 @@ func isAlreadyMinted(err error) bool {
 }
 
 func jobZkDepositToken(_ context.Context) error {
-	bridgeHistories := make([]database.BridgeHistory2, 0)
+	bridgeHistories := make([]database.BridgeHistory, 0)
 	if err := database.GetMysqlClient().Where("status = ? and destination_transaction_hash != ''", database.NftBridgeDepositing).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 		return err
 	}
@@ -792,7 +792,7 @@ func jobZkDepositToken(_ context.Context) error {
 }
 
 func jobZkWithdrawToken(_ context.Context) error {
-	bridgeHistories := make([]database.BridgeHistory2, 0)
+	bridgeHistories := make([]database.BridgeHistory, 0)
 	if err := database.GetMysqlClient().Where("status = ?", database.NftBridgeWithdrawing).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 		return err
 	}
@@ -923,7 +923,7 @@ func jobSendFtToken(_ context.Context) error {
 	}
 	logrus.Debugf("jobSendFtToken networks len:%d", len(networks))
 	for network := range networks {
-		bridgeHistories := make([]*database.BridgeHistory2, 0)
+		bridgeHistories := make([]*database.BridgeHistory, 0)
 		if err := database.GetMysqlClient().Where("status = ? AND protocol_type = ? AND destination_network_id = ?", database.NftBridgeUndo, database.Erc20, network).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 			return err
 		}
@@ -982,7 +982,7 @@ func jobSendFtToken(_ context.Context) error {
 }
 
 func jobSendNftToken(_ context.Context) error {
-	bridgeHistories := make([]database.BridgeHistory2, 0)
+	bridgeHistories := make([]database.BridgeHistory, 0)
 	if err := database.GetMysqlClient().Where("status = ? AND protocol_type = ?", database.NftBridgeUndo, database.Erc721).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 		return err
 	}
@@ -1027,7 +1027,7 @@ func jobSendNftToken(_ context.Context) error {
 }
 
 func jobSendTransactionResult(_ context.Context) error {
-	bridgeHistories := make([]database.BridgeHistory2, 0)
+	bridgeHistories := make([]database.BridgeHistory, 0)
 	if err := database.GetMysqlClient().Where("status = ? and destination_transaction_hash != ''", database.NftBridgePending).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 		return err
 	}
@@ -1056,7 +1056,7 @@ func jobSendTransactionResult(_ context.Context) error {
 }
 
 func jobRefundToken(_ context.Context) error {
-	bridgeHistories := make([]database.BridgeHistory2, 0)
+	bridgeHistories := make([]database.BridgeHistory, 0)
 	if err := database.GetMysqlClient().Where("protocol_type = ? and status = ? and refund_audit != ''", database.Erc721, database.NftBridgeFail).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 		return err
 	}
@@ -1093,7 +1093,7 @@ func jobRefundToken(_ context.Context) error {
 }
 
 func jobRefundTransactionResult(_ context.Context) error {
-	bridgeHistories := make([]database.BridgeHistory2, 0)
+	bridgeHistories := make([]database.BridgeHistory, 0)
 	if err := database.GetMysqlClient().Where("status = ? and refund_hash != ''", database.NftBridgeRefundPending).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 		return err
 	}

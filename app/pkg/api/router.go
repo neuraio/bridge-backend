@@ -218,14 +218,14 @@ func checkBridgeStatus() error {
 	}
 
 	var count int64
-	if err := database.GetMysqlClient().Model(new(database.BridgeHistory2)).Where("status = ? OR fail_reason != ''", database.NftBridgeFail).Count(&count).Error; err != nil {
+	if err := database.GetMysqlClient().Model(new(database.BridgeHistory)).Where("status = ? OR fail_reason != ''", database.NftBridgeFail).Count(&count).Error; err != nil {
 		return err
 	}
 	if count > 0 {
 		return fmt.Errorf("%d failed transactions exist", count)
 	}
 
-	if err := database.GetMysqlClient().Model(new(database.BridgeHistory2)).Where("status = ?", database.NftBridgeUndo).Count(&count).Error; err != nil {
+	if err := database.GetMysqlClient().Model(new(database.BridgeHistory)).Where("status = ?", database.NftBridgeUndo).Count(&count).Error; err != nil {
 		return err
 	}
 	if count > 50 {

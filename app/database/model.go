@@ -30,7 +30,7 @@ const (
 	//Erc20Rollup Protocol = "erc20rollup" // eth zksync rollup
 )
 
-type BridgeHistory2 struct {
+type BridgeHistory struct {
 	gorm.Model
 	SourceNetworkId            int    `json:"sourceNetworkId"`
 	SourceContractAddress      string `json:"sourceContractAddress"`
