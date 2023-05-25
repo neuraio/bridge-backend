@@ -486,6 +486,7 @@ var bridgeEventZKSyncWithdrawBlockNumErc20Handle eventHandlerFunction = func(eve
 	height := big.NewInt(0).SetBytes(common.FromHex(event.Args[0]))
 
 	recorder := &database.SyncZkProgressRecord{
+		CreatedAt:   time.Now(),
 		BlockHeight: height.Uint64(),
 		NetworkId:   int(event.networkId),
 		Type:        database.SyncZkFinalizeWithdrawalHeight,
