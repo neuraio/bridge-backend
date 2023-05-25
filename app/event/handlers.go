@@ -550,11 +550,7 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 		return err
 	}
 	var out FinalizeWithdrawalInput
-	err = parsed.Methods["finalizeWithdrawal"].Inputs.Copy(&out, res)
-	if err != nil {
-		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods error. transactionHash:%s", event.transactionHash)
-		return err
-	}
+	parsed.Methods["finalizeWithdrawal"].Inputs.Copy(&out, res)
 
 	//l2BlockNumber == l1_batch_number
 	//l2MessageIndex == proof_id
