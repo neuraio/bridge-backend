@@ -384,6 +384,9 @@ var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent,
 		logrus.Warnf("[Skip] bridgeEventZKSyncDepositErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
 		return nil
 	}
+	if strings.ToLower(bridgeEvent.L1Token.String()) != strings.ToLower(rollupTokenAddress) {
+		return nil
+	}
 	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
