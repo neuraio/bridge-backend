@@ -514,7 +514,7 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 		return errors.New("invalid event log lacking of args")
 	}
 
-	l1Token := common.HexToAddress(event.Args[0]).String()
+	l1Token := common.HexToAddress(event.Args[1]).String()
 	rollupTokenAddress, dstNetwork := getRollUpTokenAddress(event.networkId)
 	if rollupTokenAddress == "" || dstNetwork == 0 {
 		logrus.Warnf("[Skip] bridgeEventZKSyncFinalizeWithdrawErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
