@@ -31,3 +31,13 @@ func CountPendingRecord(f *request.ListHistoryRecordsFilter) (int64, error) {
 	}
 	return total, nil
 }
+
+func GetBridgeHistoryExtras(ids []uint) ([]*database.BridgeHistoryExtra, error) {
+	data := make([]*database.BridgeHistoryExtra, 0)
+	if err := database.GetMysqlClient().Model(&database.BridgeHistoryExtra{}).
+		Where("id in (?)", ids).Find(&data).Error; err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}

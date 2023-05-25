@@ -24,7 +24,13 @@ type HistoryRecordResp struct {
 	Status              database.BridgeStatus `json:"status"`
 	Erc20Amount         string                `json:"erc20Amount"`
 	DepositCount        uint64                `json:"depositCount"`
-	database.BridgeHistoryExtra
+	// extra
+	Proof          string `json:"proof"`
+	ProofID        string `json:"proofId"`
+	L1BatchNumber  string `json:"l1BatchNumber"`
+	L1BatchTxIndex string `json:"l1BatchTxIndex"`
+	Message        string `json:"message"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -42,7 +48,7 @@ func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*HistoryRec
 	if err != nil {
 		return nil, 0, 0, err
 	}
-
+	ids := make([]uint, 0)
 	for _, record := range records {
 		resp = append(resp, &HistoryRecordResp{
 			ID:                  uint64(record.ID),
@@ -63,6 +69,28 @@ func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*HistoryRec
 			Erc20Amount:         record.Erc20Amount,
 			DepositCount:        record.DepositCount,
 		})
+		if record.Status == database.NftBridgeFinalizeWithdrawal {
+			ids = append(ids, record.ID)
+		}
+	}
+	extras, err := store.GetBridgeHistoryExtras(ids)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	extrasMap := make(map[uint]*database.BridgeHistoryExtra)
+	for _, extra := range extras {
+		extrasMap[extra.ID] = extra
+	}
+
+	for _, recordResp := range resp {
+		_, ok := extrasMap[uint(recordResp.ID)]
+		if ok {
+			recordResp.Proof = extrasMap[uint(recordResp.ID)].Proof
+			recordResp.ProofID = extrasMap[uint(recordResp.ID)].ProofID
+			recordResp.L1BatchNumber = extrasMap[uint(recordResp.ID)].L1BatchNumber
+			recordResp.L1BatchTxIndex = extrasMap[uint(recordResp.ID)].L1BatchTxIndex
+			recordResp.Message = extrasMap[uint(recordResp.ID)].Message
+		}
 	}
 
 	return resp, total, recordCount, nil

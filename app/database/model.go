@@ -99,14 +99,14 @@ type Erc20BridgeContractAddress struct {
 }
 
 type BridgeHistoryExtra struct {
-	ID        uint `gorm:"primaryKey;autoIncrement:false"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
+	ID        uint       `json:"-" gorm:"primaryKey;autoIncrement:false"`
+	CreatedAt time.Time  `json:"-"`
+	UpdatedAt time.Time  `json:"-"`
+	DeletedAt *time.Time `json:"-"`
 
-	Proof          string
-	ProofID        string
-	L1BatchNumber  string
-	L1BatchTxIndex string
-	Message        string
+	Proof          string `json:"proof"`
+	ProofID        string `json:"proofId"`
+	L1BatchNumber  string `json:"l1BatchNumber"`
+	L1BatchTxIndex string `json:"l1BatchTxIndex"`
+	Message        string `json:"message"`
 }
