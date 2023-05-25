@@ -398,6 +398,7 @@ var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent,
 		DestinationNetworkId:       int(dstNetwork),
 		DestinationTransactionHash: event.Args[0],
 		DestinationAddress:         common.HexToAddress(event.Args[2]).String(),
+		Erc20Amount:                bridgeEvent.Amount.String(),
 
 		Status: database.NftBridgeDepositing,
 	}
@@ -460,8 +461,8 @@ var bridgeEventZKWithdrawErc20Handle eventHandlerFunction = func(event *LogEvent
 		//DestinationTransactionHash: event.Args[0],
 		DestinationNetworkId: int(dstNetwork),
 		DestinationAddress:   common.HexToAddress(event.Args[1]).String(),
-
-		Status: database.NftBridgeWithdrawing,
+		Erc20Amount:          bridgeEvent.Amount.String(),
+		Status:               database.NftBridgeWithdrawing,
 	}
 
 	logrus.Debugf("bridgeEventZKWithdrawErc20Handle %v", recorder)
