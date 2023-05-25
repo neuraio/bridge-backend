@@ -116,7 +116,7 @@ func (ef *eventFetchThroughRpc) subscribeEvents(event chan *LogEvent, nextSignal
 
 			ef.logFilter.FromBlock.SetUint64(fetchHeightFloor)
 			ef.logFilter.ToBlock.SetUint64(fetchHeightCell)
-
+			logrus.Debugf("ef.logFilter: begin:%d, end:%d, topics:%+v, address:%+v", ef.logFilter.FromBlock.Uint64(), ef.logFilter.ToBlock.Uint64(), ef.logFilter.Topics, ef.logFilter.Addresses)
 			logs, err := fetchLogs(ef.ethClient, ef.logFilter)
 			if err != nil {
 				logrus.Errorf("fetch log with block %d,network: %d", fetchHeightFloor, ef.networkId)
