@@ -105,7 +105,6 @@ func listBridgePair(c *gin.Context) {
 			BurnMin:         pair.MinBurn,
 			BurnMax:         pair.MaxBurn,
 			MinimumFee:      pair.MinFee,
-			LToken:          pair.LToken,
 		})
 	}
 

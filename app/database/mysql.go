@@ -23,6 +23,7 @@ func InitializeMysqlDatabase() error {
 		&BridgeHistory{},
 		&SynchronizationProgressRecord{},
 		&BridgeHistoryExtra{},
+		&SyncZkProgressRecord{},
 	); err != nil {
 		return err
 	}

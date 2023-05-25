@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/sirupsen/logrus"
 	"io"
 	"math/big"
@@ -19,7 +20,7 @@ const erc721OwnerOfRequestBody = `{"jsonrpc":"2.0","id":7,"method":"eth_call","p
 const erc20BalanceRequestBody = `{"jsonrpc":"2.0","id":7,"method":"eth_call","params":[{"from":"0x0000000000000000000000000000000000000000","data":"0x70a08231000000000000000000000000%s","to":"%s"},"latest"]}`
 const balanceRequestBody = `{"jsonrpc":"2.0","id":7,"method":"eth_getBalance","params":["%s","latest"]}`
 
-//const balanceRequestBody = `{"jsonrpc":"2.0","id":7,"method":"eth_getBalance","params":["%s","latest"]}`
+const proofRequestBody = `{"jsonrpc":"2.0","id":1,"method":"zks_getL2ToL1LogProof","params":["%s"]}`
 
 var TokenNotExistError = errors.New("nonexistent token")
 
@@ -166,4 +167,69 @@ func Erc20BalanceOf(rpcEndpoint, accountAddress, contractAddress string) (*big.I
 	}
 
 	return nil, fmt.Errorf("invalid response body %v", result)
+}
+
+type ProofResp struct {
+	JsonRpc string          `json:"jsonrpc"`
+	Result  ProofResultResp `json:"result"`
+	ID      int64           `json:"id"`
+}
+
+type ProofResultResp struct {
+	ID    int64    `json:"id"`
+	Proof []string `json:"proof"`
+	Root  string   `json:"root"`
+}
+
+func GetProof(rpcEndpoint, tx string) (*ProofResultResp, error) {
+	q := fmt.Sprintf(proofRequestBody, tx)
+
+	res, err := http.Post(rpcEndpoint, "application/json", strings.NewReader(q))
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(res.Body)
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			logrus.Error(err)
+		}
+	}(res.Body)
+
+	logrus.Debugf("GetProof request: %s response: %s", q, string(data))
+
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ProofResp{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		logrus.Errorf("invalid response %s,request: %s error: %s", string(data), q, err.Error())
+		return nil, err
+	}
+	if len(result.Result.Proof) > 0 {
+		return &result.Result, nil
+	}
+	return nil, fmt.Errorf("invalid response body %v", result)
+}
+
+type L1Batch struct {
+	L1BatchNumber  string `json:"l1BatchNumber"`
+	L1BatchTxIndex string `json:"l1BatchTxIndex"`
+}
+
+func GetTxL1Batch(rpcEndpoint, tx string) (*L1Batch, error) {
+	dial, err := rpc.Dial(rpcEndpoint)
+	if err != nil {
+		panic(err)
+	}
+	ret := &L1Batch{}
+	err = dial.CallContext(context.Background(), &ret, "eth_getTransactionByHash", common.HexToHash(tx))
+	if err != nil {
+		return nil, err
+	}
+	if ret.L1BatchNumber == "" || ret.L1BatchNumber == "0x" {
+		return nil, fmt.Errorf("GetTxL1Batch L1BatchNumber invalidate, tx:%s", tx)
+	}
+	return ret, nil
 }

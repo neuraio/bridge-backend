@@ -286,6 +286,9 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 		if chain.BridgeContract721 != "" {
 			addresses = append(addresses, chain.BridgeContract721)
 		}
+		if len(chain.ZKL1L2Contract20) > 0 {
+			addresses = append(addresses, chain.ZKL1L2Contract20...)
+		}
 		if chain.Graph == "" {
 			eventSubscriber, err = NewEventFetchThroughRpc(rpcClient, addresses, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
 			if err != nil {

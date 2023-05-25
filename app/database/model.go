@@ -65,12 +65,20 @@ type Erc721BridgeContractAddress struct {
 }
 
 const SynchronizedLatestHeight = "synchronized_latest_height"
+const SyncZkFinalizeWithdrawalHeight = "sync_zk_event_height"
 
 type SynchronizationProgressRecord struct {
 	gorm.Model
 	BlockHeight uint64
 	NetworkId   int `gorm:"uniqueIndex"`
 	Comment     string
+}
+
+type SyncZkProgressRecord struct {
+	gorm.Model
+	BlockHeight uint64
+	NetworkId   int    `gorm:"primary_key"`
+	Type        string `gorm:"primary_key"`
 }
 
 type Erc20BridgeContractAddress struct {
@@ -85,7 +93,6 @@ type Erc20BridgeContractAddress struct {
 	MinFee                string
 	RollupContractAddress string // zkevm polygon eth
 	DstNetworkId          uint64 // zkevm polygon eth network id
-	LToken                string // l1 l2 token address
 	LDstNetworkId         uint64 // l1 l2 network id
 }
 

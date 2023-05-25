@@ -24,7 +24,7 @@ type ChainCfg struct {
 	BridgeContract721  string   `yaml:"BridgeContract721"`
 	BridgeContract20   string   `yaml:"BridgeContract20"`
 	ZKBridgeContract20 string   `yaml:"ZKBridgeContract20"`
-	ZKSyncContract20   []string `yaml:"ZKSyncContract20"`
+	ZKL1L2Contract20   []string `yaml:"ZKL1L2Contract20"`
 }
 
 type ValutConfig struct {
