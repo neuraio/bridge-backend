@@ -521,6 +521,8 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 		return nil
 	}
 	if strings.ToLower(l1Token) != strings.ToLower(rollupTokenAddress) {
+		logrus.Errorf("l1Token:%s", l1Token)
+		logrus.Errorf("rollupTokenAddress:%s", rollupTokenAddress)
 		logrus.Warnf("[Skip] bridgeEventZKSyncFinalizeWithdrawErc20Handle l1Token != rollupTokenAddress. Transaction Hash: %s", event.transactionHash)
 		return nil
 	}
