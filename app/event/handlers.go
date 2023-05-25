@@ -395,7 +395,7 @@ var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent,
 		SourceTransactionHash: event.transactionHash,
 		SourceAddress:         common.HexToAddress(event.Args[1]).String(),
 
-		DestinationBlockHeight:     uint64(dstNetwork),
+		DestinationNetworkId:       int(dstNetwork),
 		DestinationTransactionHash: event.Args[0],
 		DestinationAddress:         common.HexToAddress(event.Args[2]).String(),
 
