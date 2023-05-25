@@ -10,6 +10,7 @@ import (
 	"github.com/ApeGame/bridge-backend/app/database"
 	bridge "github.com/ApeGame/bridge-backend/app/pkg/node/abi"
 	"github.com/ApeGame/bridge-backend/app/pkg/node/tools"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -38,6 +39,7 @@ const (
 	zkWithdrawErc20Topic        = "0x2fc3848834aac8e883a2d2a17a7514dc4f2d3dd268089df9b9f5d918259ef3b0" // event WithdrawalInitiated(address indexed l2Sender, address indexed l1Receiver, address indexed l2Token, uint256 amount)
 	zkL1MessageSentErc20Topic   = "0x3a36e47291f4201faf137fab081d92295bce2d53be2c6ca68ba82c7faa9ce241" // event L1MessageSent(address indexed _sender, bytes32 indexed _hash, bytes _message)
 	zkSyncWithdrawBlockNumTopic = "0x2402307311a4d6604e4e7b4c8a15a7e1213edb39c16a31efa70afb06030d3165"
+	zkSyncFinalizeWithdrawTopic = "0xac1b18083978656d557d6e91c88203585cfda1031bdb14538327121ef140d383"
 )
 
 type Erc20ContractAddress struct {
@@ -503,6 +505,80 @@ var bridgeEventZKSyncWithdrawBlockNumErc20Handle eventHandlerFunction = func(eve
 	return mysqlClient.Save(recorder).Error
 }
 
+var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	if event.Topic != zkSyncFinalizeWithdrawTopic {
+		return errors.New("invalid topic")
+	}
+
+	if len(event.Args) < 2 {
+		return errors.New("invalid event log lacking of args")
+	}
+
+	l1Token := common.HexToAddress(event.Args[0]).String()
+	rollupTokenAddress, dstNetwork := getRollUpTokenAddress(event.networkId)
+	if rollupTokenAddress == "" || dstNetwork == 0 {
+		logrus.Warnf("[Skip] bridgeEventZKSyncFinalizeWithdrawErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+	if strings.ToLower(l1Token) != strings.ToLower(rollupTokenAddress) {
+		logrus.Warnf("[Skip] bridgeEventZKSyncFinalizeWithdrawErc20Handle l1Token != rollupTokenAddress. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+
+	client, found := nodeClients[event.networkId]
+	if !found {
+		return fmt.Errorf("client not found: %d", event.networkId)
+	}
+	tx, _, err := client.rpcClient.TransactionByHash(context.Background(), common.HexToHash(event.transactionHash))
+	if err != nil {
+		if errors.Is(err, ethereum.NotFound) {
+			return err
+		}
+		return err
+	}
+
+	// decode input data
+	parsed, _ := abi.JSON(strings.NewReader(bridge.L1ERC20BridgeABI))
+	// 解码输入数据
+	res, err := parsed.Methods["finalizeWithdrawal"].Inputs.Unpack(tx.Data()[4:])
+	if err != nil {
+		return err
+	}
+	var out FinalizeWithdrawalInput
+	err = parsed.Methods["finalizeWithdrawal"].Inputs.Copy(&out, res)
+	if err != nil {
+		return err
+	}
+
+	//l2BlockNumber == l1_batch_number
+	//l2MessageIndex == proof_id
+	//l2TxNumberInBlock == l1_batch_tx_index
+	extra := &database.BridgeHistoryExtra{}
+	if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
+		Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", out.L2BlockNumber.Uint64(),
+			out.L2MessageIndex.Uint64(), out.L2TxNumberInBlock).First(&extra).Error; err != nil {
+		return err
+	}
+
+	recorder := &database.BridgeHistory{
+		DestinationBlockHeight: event.blockNumber,
+		Status:                 database.NftBridgeSuccess,
+	}
+	recorder.ID = extra.ID
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+
+	return mysqlClient.Save(recorder).Error
+}
+
+type FinalizeWithdrawalInput struct {
+	L2BlockNumber     *big.Int `json:"_l2BlockNumber"`
+	L2MessageIndex    *big.Int `json:"_l2MessageIndex"`
+	L2TxNumberInBlock uint16   `json:"_l2TxNumberInBlock"`
+}
+
 func getDestinationContractAddress(sourceNetwork, destinationNetwork networkId, sourceContractAddress string) (string, *big.Int) {
 	erc20ContractPairsLocker.Lock()
 	defer erc20ContractPairsLocker.Unlock()
@@ -767,7 +843,7 @@ func isAlreadyMinted(err error) bool {
 
 func jobZkDepositToken(_ context.Context) error {
 	bridgeHistories := make([]database.BridgeHistory, 0)
-	if err := database.GetMysqlClient().Where("status = ? and destination_transaction_hash != ''", database.NftBridgeDepositing).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
+	if err := database.GetMysqlClient().Where("status = ?  and destination_transaction_hash != ''", database.NftBridgeDepositing).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 		return err
 	}
 	for _, bridgeHistory := range bridgeHistories {
