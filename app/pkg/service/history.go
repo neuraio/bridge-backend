@@ -24,7 +24,7 @@ type HistoryRecordResp struct {
 	Status              database.BridgeStatus `json:"status"`
 	Erc20Amount         string                `json:"erc20Amount"`
 	DepositCount        uint64                `json:"depositCount"`
-
+	database.BridgeHistoryExtra
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

@@ -874,19 +874,16 @@ func jobZkWithdrawToken(_ context.Context) error {
 				return err
 			}
 		}
-		l1BatchNum, err := hexutil.Decode(extra.L1BatchNumber)
-		if err != nil {
-			return err
-		}
-		l1BatchNuma := big.NewInt(0).SetBytes(l1BatchNum).Uint64()
+		l1BatchNum := big.NewInt(0).SetBytes(common.FromHex(extra.L1BatchNumber)).Uint64()
+
 		logrus.Debugf("extra.Message:%s", extra.Message)
 		logrus.Debugf("extra.Proof:%s", extra.Proof)
 		logrus.Debugf("extra.ProofID:%s", extra.ProofID)
 		logrus.Debugf("extra.L1BatchNumber:%s", extra.L1BatchNumber)
 		logrus.Debugf("extra.L1BatchTxIndex:%s", extra.L1BatchTxIndex)
 		logrus.Debugf("height.BlockHeight:%d", height.BlockHeight)
-		logrus.Debugf("extra.Message:%d", l1BatchNuma)
-		if extra.Message != "" && extra.Proof != "" && extra.ProofID != "" && extra.L1BatchNumber != "" && extra.L1BatchTxIndex != "" && height.BlockHeight >= big.NewInt(0).SetBytes(l1BatchNum).Uint64() {
+		logrus.Debugf("extra.Message:%d", l1BatchNum)
+		if extra.Message != "" && extra.Proof != "" && extra.ProofID != "" && extra.L1BatchNumber != "" && extra.L1BatchTxIndex != "" && height.BlockHeight >= l1BatchNum {
 			bridgeHistory.Status = database.NftBridgeFinalizeWithdrawal
 		}
 
