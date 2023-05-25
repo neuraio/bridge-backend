@@ -393,11 +393,11 @@ var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent,
 		SourceNetworkId:       int(event.networkId),
 		SourceBlockHeight:     event.blockNumber,
 		SourceTransactionHash: event.transactionHash,
-		SourceAddress:         event.Args[1],
+		SourceAddress:         common.HexToAddress(event.Args[1]).String(),
 
 		DestinationBlockHeight:     uint64(dstNetwork),
 		DestinationTransactionHash: event.Args[0],
-		DestinationAddress:         event.Args[2],
+		DestinationAddress:         common.HexToAddress(event.Args[2]).String(),
 
 		Status: database.NftBridgeDepositing,
 	}
@@ -408,8 +408,11 @@ var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent,
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
 	}
-
-	return mysqlClient.Save(recorder).Error
+	if err := mysqlClient.Save(recorder).Error; err != nil {
+		logrus.Errorf("bridgeEventZKSyncDepositErc20Handle mysqlClient.Save(recorder) %s", err)
+		return err
+	}
+	return nil
 }
 
 var bridgeEventZKWithdrawErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
