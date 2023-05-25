@@ -5,9 +5,9 @@ import (
 	"github.com/ApeGame/bridge-backend/app/pkg/request"
 )
 
-func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*database.BridgeHistory, total int64, err error) {
-	data = make([]*database.BridgeHistory, 0)
-	q := database.GetMysqlClient().Model(&database.BridgeHistory{}).
+func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*database.BridgeHistory2, total int64, err error) {
+	data = make([]*database.BridgeHistory2, 0)
+	q := database.GetMysqlClient().Model(&database.BridgeHistory2{}).
 		Where("source_address = ? or destination_address = ?", f.Address, f.Address).
 		Where("protocol_type = ?", f.Protocol)
 	if err := q.Count(&total).Error; err != nil {
@@ -22,7 +22,7 @@ func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*database.B
 
 func CountPendingRecord(f *request.ListHistoryRecordsFilter) (int64, error) {
 	var total int64
-	if err := database.GetMysqlClient().Model(&database.BridgeHistory{}).
+	if err := database.GetMysqlClient().Model(&database.BridgeHistory2{}).
 		Where("source_address = ? or destination_address = ?", f.Address, f.Address).
 		Where("status = ? or status = ? or status = ?", database.NftBridgeUndo, database.NftBridgePending, database.NftBridgeZKing).
 		Where("protocol_type = ?", f.Protocol).

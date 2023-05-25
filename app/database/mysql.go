@@ -20,7 +20,7 @@ func InitializeMysqlDatabase() error {
 	if err := client.AutoMigrate(
 		&Erc721BridgeContractAddress{},
 		&Erc20BridgeContractAddress{},
-		&BridgeHistory{},
+		&BridgeHistory2{},
 		&SynchronizationProgressRecord{},
 		&BridgeHistoryExtra{},
 		&SyncZkProgressRecord{},
