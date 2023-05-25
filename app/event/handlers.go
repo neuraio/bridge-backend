@@ -408,7 +408,7 @@ var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent,
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
 	}
-	if err := mysqlClient.Save(recorder).Error; err != nil {
+	if err := mysqlClient.Create(recorder).Error; err != nil {
 		logrus.Errorf("bridgeEventZKSyncDepositErc20Handle mysqlClient.Save(recorder) %s", err)
 		return err
 	}
