@@ -866,7 +866,7 @@ func jobZkWithdrawToken(_ context.Context) error {
 		}
 		height := &database.SyncZkProgressRecord{}
 		if err := database.GetMysqlClient().Model(&database.SyncZkProgressRecord{}).
-			Where("network_id = ? and type = ?", bridgeHistory.SourceNetworkId, database.SyncZkFinalizeWithdrawalHeight).
+			Where("network_id = ? and type = ?", bridgeHistory.DestinationNetworkId, database.SyncZkFinalizeWithdrawalHeight).
 			First(&height).Error; err != nil {
 			if err != gorm.ErrRecordNotFound {
 				return err
