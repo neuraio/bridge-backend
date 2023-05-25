@@ -566,7 +566,7 @@ func getRollUpTokenAddress(sourceNetwork networkId) (string, networkId) {
 	defer erc20ContractPairsLocker.Unlock()
 
 	if len(erc20ContractPairs) == 0 {
-		logrus.Error("getRollUpContractAddress erc20ContractPairs ==0 ")
+		logrus.Error("getRollUpTokenAddress erc20ContractPairs ==0 ")
 		return "", 0
 	}
 	//logrus.Debugf("getRollUpContractAddress sourceNetwork :%d,  erc20ContractPairs:%+v", sourceNetwork, erc20ContractPairs)
@@ -574,7 +574,7 @@ func getRollUpTokenAddress(sourceNetwork networkId) (string, networkId) {
 	var dstNetworkID networkId = 0
 	for _, erc20ContractPair := range erc20ContractPairs {
 		for j := range erc20ContractPair {
-			if erc20ContractPair[j].NetworkId == sourceNetwork && erc20ContractPair[j].RollupContractAddress != "" {
+			if erc20ContractPair[j].NetworkId == sourceNetwork && erc20ContractPair[j].LDstNetworkId > 0 {
 				rollupTokenAddress = erc20ContractPair[j].ContractAddress
 				dstNetworkID = erc20ContractPair[j].LDstNetworkId
 			}
