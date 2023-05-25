@@ -564,17 +564,12 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 		return err
 	}
 
-	recorder := &database.BridgeHistory{
-		DestinationBlockHeight: event.blockNumber,
-		Status:                 database.NftBridgeSuccess,
-	}
-	recorder.ID = extra.ID
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
 	}
 
-	return mysqlClient.Save(recorder).Error
+	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", extra.ID).Updates(map[string]interface{}{"destination_block_height": event.blockNumber, "status": database.NftBridgeSuccess}).Error
 }
 
 type FinalizeWithdrawalInput struct {
