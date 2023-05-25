@@ -844,7 +844,7 @@ func jobZkWithdrawToken(_ context.Context) error {
 				logrus.Errorf("tools.GetProof error. err: %s", err)
 				continue
 			}
-			proofMar, err := json.Marshal(proof)
+			proofMar, err := json.Marshal(proof.Proof)
 			if err != nil {
 				return err
 			}

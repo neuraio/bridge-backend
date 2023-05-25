@@ -75,7 +75,9 @@ type SynchronizationProgressRecord struct {
 }
 
 type SyncZkProgressRecord struct {
-	gorm.Model
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	DeletedAt   gorm.DeletedAt `gorm:"index"`
 	BlockHeight uint64
 	NetworkId   int    `gorm:"primary_key"`
 	Type        string `gorm:"primary_key"`
