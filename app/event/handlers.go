@@ -396,6 +396,7 @@ var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent,
 		SourceBlockHeight:     event.blockNumber,
 		SourceTransactionHash: event.transactionHash,
 		SourceAddress:         common.HexToAddress(event.Args[1]).String(),
+		SourceContractAddress: bridgeEvent.L1Token.String(),
 
 		DestinationNetworkId:       int(dstNetwork),
 		DestinationTransactionHash: event.Args[0],
@@ -458,9 +459,8 @@ var bridgeEventZKWithdrawErc20Handle eventHandlerFunction = func(event *LogEvent
 		SourceBlockHeight:     event.blockNumber,
 		SourceTransactionHash: event.transactionHash,
 		SourceAddress:         common.HexToAddress(event.Args[0]).String(),
+		SourceContractAddress: common.HexToAddress(event.Args[2]).String(),
 
-		//DestinationBlockHeight: ,
-		//DestinationTransactionHash: event.Args[0],
 		DestinationNetworkId: int(dstNetwork),
 		DestinationAddress:   common.HexToAddress(event.Args[1]).String(),
 		Erc20Amount:          bridgeEvent.Amount.String(),
@@ -788,6 +788,7 @@ func init() {
 	registerHandlerFunction(zkDepositErc20Topic, bridgeEventZKDepositErc20Handle)
 	registerHandlerFunction(zkWithdrawErc20Topic, bridgeEventZKWithdrawErc20Handle)
 	registerHandlerFunction(zkSyncWithdrawBlockNumTopic, bridgeEventZKSyncWithdrawBlockNumErc20Handle)
+	registerHandlerFunction(zkSyncFinalizeWithdrawTopic, bridgeEventZKSyncFinalizeWithdrawErc20Handle)
 
 	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(10*time.Second, jobSendFtToken),
 		cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken),
