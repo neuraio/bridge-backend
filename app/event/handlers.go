@@ -527,11 +527,13 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 
 	client, found := nodeClients[event.networkId]
 	if !found {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle nodeClients[event.networkId] error. networkID:%s", event.networkId)
 		return fmt.Errorf("client not found: %d", event.networkId)
 	}
 	tx, _, err := client.rpcClient.TransactionByHash(context.Background(), common.HexToHash(event.transactionHash))
 	if err != nil {
 		if errors.Is(err, ethereum.NotFound) {
+			logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle TransactionByHash error. transactionHash:%s", event.transactionHash)
 			return err
 		}
 		return err
@@ -542,11 +544,13 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	// 解码输入数据
 	res, err := parsed.Methods["finalizeWithdrawal"].Inputs.Unpack(tx.Data()[4:])
 	if err != nil {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s", event.transactionHash)
 		return err
 	}
 	var out FinalizeWithdrawalInput
 	err = parsed.Methods["finalizeWithdrawal"].Inputs.Copy(&out, res)
 	if err != nil {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods error. transactionHash:%s", event.transactionHash)
 		return err
 	}
 
@@ -557,6 +561,7 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
 		Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", out.L2BlockNumber.Uint64(),
 			out.L2MessageIndex.Uint64(), out.L2TxNumberInBlock).First(&extra).Error; err != nil {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle BridgeHistoryExtra error. transactionHash:%s", event.transactionHash)
 		return err
 	}
 
