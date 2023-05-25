@@ -444,21 +444,22 @@ var bridgeEventZKWithdrawErc20Handle eventHandlerFunction = func(event *LogEvent
 		logrus.Warnf("[Skip] bridgeEventZKWithdrawErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
 		return nil
 	}
-	if strings.ToLower(event.Args[2]) != strings.ToLower(rollupTokenAddress) {
+	if strings.ToLower(common.HexToAddress(event.Args[2]).String()) != strings.ToLower(rollupTokenAddress) {
 		return nil
 	}
+
 	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
 		SourceNetworkId:       int(event.networkId),
 		SourceBlockHeight:     event.blockNumber,
 		SourceTransactionHash: event.transactionHash,
-		SourceAddress:         event.Args[0],
+		SourceAddress:         common.HexToAddress(event.Args[0]).String(),
 
 		//DestinationBlockHeight: ,
 		//DestinationTransactionHash: event.Args[0],
 		DestinationNetworkId: int(dstNetwork),
-		DestinationAddress:   event.Args[1],
+		DestinationAddress:   common.HexToAddress(event.Args[1]).String(),
 
 		Status: database.NftBridgeWithdrawing,
 	}
