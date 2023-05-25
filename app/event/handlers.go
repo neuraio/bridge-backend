@@ -877,10 +877,17 @@ func jobZkWithdrawToken(_ context.Context) error {
 		if err != nil {
 			return err
 		}
-
+		l1BatchNuma := big.NewInt(0).SetBytes(l1BatchNum).Uint64()
 		if extra.Message != "" && extra.Proof != "" && extra.ProofID != "" && extra.L1BatchNumber != "" && extra.L1BatchTxIndex != "" && height.BlockHeight >= big.NewInt(0).SetBytes(l1BatchNum).Uint64() {
 			bridgeHistory.Status = database.NftBridgeFinalizeWithdrawal
 		}
+		logrus.Debugf("extra.Message:%s", extra.Message)
+		logrus.Debugf("extra.Proof:%s", extra.Proof)
+		logrus.Debugf("extra.ProofID:%s", extra.ProofID)
+		logrus.Debugf("extra.L1BatchNumber:%s", extra.L1BatchNumber)
+		logrus.Debugf("extra.L1BatchTxIndex:%s", extra.L1BatchTxIndex)
+		logrus.Debugf("height.BlockHeight:%d", height.BlockHeight)
+		logrus.Debugf("extra.Message:%d", l1BatchNuma)
 		if err := database.GetMysqlClient().Save(&bridgeHistory).Error; err != nil {
 			logrus.Error(err)
 		}
