@@ -101,7 +101,7 @@ func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graph
 }
 
 type eventLogGraphQueryBlockModel struct {
-	Number string `json:"number"`
+	Number interface{} `json:"number"`
 }
 
 type eventLogGraphQueryAccountModel struct {
@@ -223,10 +223,19 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 					logrus.Infof("subscribeEvents fetch new event log, hash: %s, address: %s, topics: %v, data: %s...", eventLog.Transaction.Hash, eventLog.Account.Address, eventLog.Topics, eventLog.Data)
 				}
 
+				var num uint64
+				switch v := eventLog.Transaction.Block.Number.(type) {
+				case string:
+					num = big.NewInt(0).SetBytes(common.FromHex(v)).Uint64()
+				case uint64:
+					num = v
+				default:
+					logrus.Errorf("subscribeEvents, network: %d, get block num : %s", ef.networkId, eventLog.Transaction.Block.Number)
+				}
 				logEvent := &LogEvent{
 					Topic:           eventLog.Topics[0],
 					Data:            eventLog.Data,
-					blockNumber:     big.NewInt(0).SetBytes(common.FromHex(eventLog.Transaction.Block.Number)).Uint64(),
+					blockNumber:     num,
 					transactionHash: eventLog.Transaction.Hash,
 					networkId:       ef.networkId,
 				}
