@@ -265,8 +265,8 @@ func getTransactionResult(ctx context.Context, networkId networkId, hash string)
 		}
 		return 0, 0, err
 	}
-	if receipt == nil {
-		return 0, 0, fmt.Errorf("getTransactionResult receipt nil. networkID:%d", networkId)
+	if receipt == nil || receipt.BlockNumber == nil {
+		return 0, 0, fmt.Errorf("getTransactionResult receipt nil. networkID:%d, hash:%s", networkId, hash)
 	}
 	switch receipt.Status {
 	case 0:
