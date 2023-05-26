@@ -40,6 +40,7 @@ const (
 	zkL1MessageSentErc20Topic   = "0x3a36e47291f4201faf137fab081d92295bce2d53be2c6ca68ba82c7faa9ce241" // event L1MessageSent(address indexed _sender, bytes32 indexed _hash, bytes _message)
 	zkSyncWithdrawBlockNumTopic = "0x2402307311a4d6604e4e7b4c8a15a7e1213edb39c16a31efa70afb06030d3165"
 	zkSyncFinalizeWithdrawTopic = "0xac1b18083978656d557d6e91c88203585cfda1031bdb14538327121ef140d383"
+	zkDepositRefundErc20Topic   = "0xbe066dc591f4a444f75176d387c3e6c775e5706d9ea9a91d11eb49030c66cf60"
 )
 
 type Erc20ContractAddress struct {
@@ -572,6 +573,73 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", extra.ID).Updates(map[string]interface{}{"destination_block_height": event.blockNumber, "status": database.NftBridgeSuccess}).Error
 }
 
+var bridgeEventZKDepositRefundErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	if event.Topic != zkDepositRefundErc20Topic {
+		return errors.New("invalid topic")
+	}
+
+	if len(event.Args) < 2 {
+		return errors.New("invalid event log lacking of args")
+	}
+
+	l1Token := common.HexToAddress(event.Args[1]).String()
+	rollupTokenAddress, dstNetwork := getRollUpTokenAddress(event.networkId)
+	if rollupTokenAddress == "" || dstNetwork == 0 {
+		logrus.Warnf("[Skip] bridgeEventZKSyncFinalizeWithdrawErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+	if strings.ToLower(l1Token) != strings.ToLower(rollupTokenAddress) {
+		logrus.Errorf("l1Token:%s", l1Token)
+		logrus.Errorf("rollupTokenAddress:%s", rollupTokenAddress)
+		logrus.Warnf("[Skip] bridgeEventZKSyncFinalizeWithdrawErc20Handle l1Token != rollupTokenAddress. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+
+	client, found := nodeClients[event.networkId]
+	if !found {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle nodeClients[event.networkId] error. networkID:%s", event.networkId)
+		return fmt.Errorf("client not found: %d", event.networkId)
+	}
+	tx, _, err := client.rpcClient.TransactionByHash(context.Background(), common.HexToHash(event.transactionHash))
+	if err != nil {
+		if errors.Is(err, ethereum.NotFound) {
+			logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle TransactionByHash error. transactionHash:%s", event.transactionHash)
+			return err
+		}
+		return err
+	}
+
+	// decode input data
+	parsed, _ := abi.JSON(strings.NewReader(bridge.L1ERC20BridgeABI))
+	// 解码输入数据
+	res, err := parsed.Methods["finalizeWithdrawal"].Inputs.Unpack(tx.Data()[4:])
+	if err != nil {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s", event.transactionHash)
+		return err
+	}
+	var out FinalizeWithdrawalInput
+	parsed.Methods["finalizeWithdrawal"].Inputs.Copy(&out, res)
+
+	//l2BlockNumber == l1_batch_number
+	//l2MessageIndex == proof_id
+	//l2TxNumberInBlock == l1_batch_tx_index
+
+	extra := &database.BridgeHistoryExtra{}
+	if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
+		Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", hexutil.EncodeBig(out.L2BlockNumber),
+			out.L2MessageIndex.Uint64(), hexutil.EncodeBig(big.NewInt(int64(out.L2TxNumberInBlock)))).First(&extra).Error; err != nil {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle BridgeHistoryExtra error. transactionHash:%s", event.transactionHash)
+		return err
+	}
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+
+	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", extra.ID).Updates(map[string]interface{}{"destination_block_height": event.blockNumber, "status": database.NftBridgeSuccess}).Error
+}
+
 type FinalizeWithdrawalInput struct {
 	L2BlockNumber     *big.Int `json:"_l2BlockNumber"`
 	L2MessageIndex    *big.Int `json:"_l2MessageIndex"`
@@ -952,13 +1020,85 @@ func jobZkWithdrawToken(_ context.Context) error {
 		}
 		l1BatchNum := big.NewInt(0).SetBytes(common.FromHex(extra.L1BatchNumber)).Uint64()
 
-		logrus.Debugf("extra.Message:%s", extra.Message)
-		logrus.Debugf("extra.Proof:%s", extra.Proof)
-		logrus.Debugf("extra.ProofID:%s", extra.ProofID)
-		logrus.Debugf("extra.L1BatchNumber:%s", extra.L1BatchNumber)
-		logrus.Debugf("extra.L1BatchTxIndex:%s", extra.L1BatchTxIndex)
-		logrus.Debugf("height.BlockHeight:%d", height.BlockHeight)
 		logrus.Debugf("extra.Message:%d", l1BatchNum)
+		if extra.Message != "" && extra.Proof != "" && extra.ProofID != "" && extra.L1BatchNumber != "" && extra.L1BatchTxIndex != "" && height.BlockHeight >= l1BatchNum {
+			bridgeHistory.Status = database.NftBridgeFinalizeWithdrawal
+		}
+
+		if err := database.GetMysqlClient().Save(&bridgeHistory).Error; err != nil {
+			logrus.Error(err)
+		}
+	}
+
+	return nil
+}
+
+func jobZkDepositRefundToken(_ context.Context) error {
+	bridgeHistories := make([]database.BridgeHistory, 0)
+	if err := database.GetMysqlClient().Where("status = ?", database.NftBridgeDepositRefund).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
+		return err
+	}
+	ids := make([]uint, len(bridgeHistories))
+	for i, bridgeHistory := range bridgeHistories {
+		ids[i] = bridgeHistory.ID
+	}
+	bhes := make([]*database.BridgeHistoryExtra, 0)
+	if err := database.GetMysqlClient().Where("id in (?)", ids).Find(&bhes).Error; err != nil {
+		return err
+	}
+	bhesMap := make(map[uint]*database.BridgeHistoryExtra)
+	for _, bhe := range bhes {
+		bhesMap[bhe.ID] = bhe
+	}
+
+	for _, bridgeHistory := range bridgeHistories {
+		extra, ok := bhesMap[bridgeHistory.ID]
+		if !ok {
+			extra = &database.BridgeHistoryExtra{
+				ID: bridgeHistory.ID,
+			}
+		}
+		client, found := nodeClients[networkId(bridgeHistory.SourceNetworkId)]
+		if !found {
+			return fmt.Errorf("client not found: %d", bridgeHistory.SourceNetworkId)
+		}
+
+		if extra.Proof == "" || extra.ProofID == "" {
+			proof, err := tools.GetProof(client.rpcEndpoint, bridgeHistory.SourceTransactionHash)
+			if err != nil {
+				logrus.Errorf("tools.GetProof error. err: %s", err)
+				continue
+			}
+			proofMar, err := json.Marshal(proof.Proof)
+			if err != nil {
+				return err
+			}
+			extra.Proof = string(proofMar)
+			extra.ProofID = fmt.Sprint(proof.ID)
+		}
+		if extra.L1BatchNumber == "" || extra.L1BatchTxIndex == "" {
+			batch, err := tools.GetTxL1Batch(client.rpcEndpoint, bridgeHistory.SourceTransactionHash)
+			if err != nil {
+				logrus.Errorf("tools.GetTxL1Batch error. err: %s", err)
+				continue
+			}
+			extra.L1BatchNumber = batch.L1BatchNumber
+			extra.L1BatchTxIndex = batch.L1BatchTxIndex
+		}
+
+		if err := database.GetMysqlClient().Save(&extra).Error; err != nil {
+			logrus.Error(err)
+		}
+		height := &database.SyncZkProgressRecord{}
+		if err := database.GetMysqlClient().Model(&database.SyncZkProgressRecord{}).
+			Where("network_id = ? and type = ?", bridgeHistory.DestinationNetworkId, database.SyncZkFinalizeWithdrawalHeight).
+			First(&height).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return err
+			}
+		}
+		l1BatchNum := big.NewInt(0).SetBytes(common.FromHex(extra.L1BatchNumber)).Uint64()
+
 		if extra.Message != "" && extra.Proof != "" && extra.ProofID != "" && extra.L1BatchNumber != "" && extra.L1BatchTxIndex != "" && height.BlockHeight >= l1BatchNum {
 			bridgeHistory.Status = database.NftBridgeFinalizeWithdrawal
 		}

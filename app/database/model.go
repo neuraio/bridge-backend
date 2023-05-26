@@ -20,6 +20,7 @@ const (
 	NftBridgeDepositing         // zksync deposit
 	NftBridgeWithdrawing        // zksync withdraw
 	NftBridgeFinalizeWithdrawal // zksync finalizeWithdrawal
+	NftBridgeDepositRefund
 )
 
 type Protocol string

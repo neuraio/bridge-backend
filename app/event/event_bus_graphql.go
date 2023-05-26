@@ -224,13 +224,28 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 				}
 
 				var num uint64
-				switch v := eventLog.Transaction.Block.Number.(type) {
+				switch eventLog.Transaction.Block.Number.(type) {
 				case string:
-					num = big.NewInt(0).SetBytes(common.FromHex(v)).Uint64()
-				case uint64:
-					num = v
+					n, ok := eventLog.Transaction.Block.Number.(string)
+					if !ok {
+						logrus.Errorf("subscribeEvents,  string network: %d, get block num : %v", ef.networkId, eventLog.Transaction.Block.Number)
+						mutex.Unlock()
+						goto endLoop
+					}
+					num = big.NewInt(0).SetBytes(common.FromHex(n)).Uint64()
+				case float64:
+					n, ok := eventLog.Transaction.Block.Number.(float64)
+					if !ok {
+						logrus.Errorf("subscribeEvents, float64 network: %d, get block num : %v", ef.networkId, eventLog.Transaction.Block.Number)
+						mutex.Unlock()
+						goto endLoop
+					}
+					num = uint64(n)
+
 				default:
-					logrus.Errorf("subscribeEvents, network: %d, get block num : %s", ef.networkId, eventLog.Transaction.Block.Number)
+					logrus.Errorf("subscribeEvents, defalut network: %d, get block num : %s", ef.networkId, eventLog.Transaction.Block.Number)
+					mutex.Unlock()
+					goto endLoop
 				}
 				logEvent := &LogEvent{
 					Topic:           eventLog.Topics[0],
@@ -265,7 +280,11 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 }
 
 var graphLog = func(s string) {
-	logrus.Debugln(s)
+	if len(s) > 500 {
+		logrus.Debugln(s[:500])
+	} else {
+		logrus.Debugln(s)
+	}
 }
 
 func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransaction, nextSignals map[networkId]chan struct{}, eventLog chan *LogEvent) {
