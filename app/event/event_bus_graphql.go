@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ApeGame/bridge-backend/app/pkg/node/tools"
+	"github.com/ethereum/go-ethereum/common"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -99,7 +101,7 @@ func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graph
 }
 
 type eventLogGraphQueryBlockModel struct {
-	Number uint64 `json:"number"`
+	Number string `json:"number"`
 }
 
 type eventLogGraphQueryAccountModel struct {
@@ -224,7 +226,7 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 				logEvent := &LogEvent{
 					Topic:           eventLog.Topics[0],
 					Data:            eventLog.Data,
-					blockNumber:     eventLog.Transaction.Block.Number,
+					blockNumber:     big.NewInt(0).SetBytes(common.FromHex(eventLog.Transaction.Block.Number)).Uint64(),
 					transactionHash: eventLog.Transaction.Hash,
 					networkId:       ef.networkId,
 				}
