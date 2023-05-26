@@ -24,7 +24,8 @@ func CountPendingRecord(f *request.ListHistoryRecordsFilter) (int64, error) {
 	var total int64
 	if err := database.GetMysqlClient().Model(&database.BridgeHistory{}).
 		Where("source_address = ? or destination_address = ?", f.Address, f.Address).
-		Where("status = ? or status = ? or status = ?", database.NftBridgeUndo, database.NftBridgePending, database.NftBridgeZKing).
+		Where("status = ? or status = ? or status = ?", database.NftBridgeUndo, database.NftBridgePending,
+			database.NftBridgeZKing, database.NftBridgeDepositing, database.NftBridgeWithdrawing).
 		Where("protocol_type = ?", f.Protocol).
 		Count(&total).Error; err != nil {
 		return 0, err
