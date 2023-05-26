@@ -943,11 +943,15 @@ func jobZkWithdrawToken(_ context.Context) error {
 	if err := database.GetMysqlClient().Where("status = ?", database.NftBridgeWithdrawing).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 		return err
 	}
+	if len(bridgeHistories) == 0 {
+		return nil
+	}
 	ids := make([]uint, len(bridgeHistories))
 	for i, bridgeHistory := range bridgeHistories {
 		ids[i] = bridgeHistory.ID
 	}
 	bhes := make([]*database.BridgeHistoryExtra, 0)
+
 	if err := database.GetMysqlClient().Where("id in (?)", ids).Find(&bhes).Error; err != nil {
 		return err
 	}
