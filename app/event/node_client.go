@@ -219,7 +219,7 @@ func sentTo(sourceNetworkId, destinationNetworkId networkId, destinationContract
 		return sendRawTransaction(abiObject721, client.rpcClient, destinationNetworkId, "sendTo", client.authenticator.From, client.bridgeContractAddressErc721, client.authenticator.Signer, big.NewInt(int64(sourceNetworkId)), common.HexToAddress(destinationContractAddress), big.NewInt(int64(tokenId)), common.HexToAddress(receiverAddress))
 	}
 
-	if destinationNetworkId == 280 {
+	if destinationNetworkId == 280 || destinationNetworkId == 324 {
 		gasPrice, err := client.rpcClient.SuggestGasPrice(context.Background())
 		if err != nil {
 			return "", fmt.Errorf("client.rpcClient.SuggestGasPrice error. err:%s", err.Error())
