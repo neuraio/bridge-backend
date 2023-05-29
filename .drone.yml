@@ -54,6 +54,7 @@ steps:
   - name: deploy app PROD
     image: appleboy/drone-ssh:1.6.6-linux-amd64
     settings:
+      build_tag: ${DRONE_COMMIT_SHA:0:7}
       host:
         - 54.219.205.205
       username: root

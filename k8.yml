@@ -16,7 +16,7 @@ spec:
       imagePullSecrets:
         - name: regcred
       containers:
-        - image: ankrnetwork/bridge-backend:release
+        - image: "ankrnetwork/{{repo_name}}:{{build_tag}}"
           name: bridge-backend-service
           imagePullPolicy: Always
           ports:
