@@ -2,6 +2,7 @@ package database
 
 import (
 	"gorm.io/gorm"
+	"time"
 )
 
 type BridgeStatus int
@@ -16,6 +17,10 @@ const (
 	NftBridgeRefundFail
 	NftBridgeZKing
 	NftBridgeZKDepositSlow
+	NftBridgeDepositing         // zksync deposit
+	NftBridgeWithdrawing        // zksync withdraw
+	NftBridgeFinalizeWithdrawal // zksync finalizeWithdrawal
+	NftBridgeDepositRefund
 )
 
 type Protocol string
@@ -23,6 +28,7 @@ type Protocol string
 const (
 	Erc20  Protocol = "erc20"
 	Erc721 Protocol = "erc721"
+	//Erc20Rollup Protocol = "erc20rollup" // eth zksync rollup
 )
 
 type BridgeHistory struct {
@@ -60,12 +66,22 @@ type Erc721BridgeContractAddress struct {
 }
 
 const SynchronizedLatestHeight = "synchronized_latest_height"
+const SyncZkFinalizeWithdrawalHeight = "sync_zk_event_height"
 
 type SynchronizationProgressRecord struct {
 	gorm.Model
 	BlockHeight uint64
 	NetworkId   int `gorm:"uniqueIndex"`
 	Comment     string
+}
+
+type SyncZkProgressRecord struct {
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	DeletedAt   gorm.DeletedAt `gorm:"index"`
+	BlockHeight uint64
+	NetworkId   int    `gorm:"primary_key"`
+	Type        string `gorm:"primary_key"`
 }
 
 type Erc20BridgeContractAddress struct {
@@ -78,6 +94,20 @@ type Erc20BridgeContractAddress struct {
 	MinBurn               string
 	MaxBurn               string
 	MinFee                string
-	RollupContractAddress string
-	DstNetworkId          uint64
+	RollupContractAddress string // zkevm polygon eth
+	DstNetworkId          uint64 // zkevm polygon eth network id
+	LDstNetworkId         uint64 // l1 l2 network id
+}
+
+type BridgeHistoryExtra struct {
+	ID        uint       `json:"-" gorm:"primaryKey;autoIncrement:false"`
+	CreatedAt time.Time  `json:"-"`
+	UpdatedAt time.Time  `json:"-"`
+	DeletedAt *time.Time `json:"-"`
+
+	Proof          string `json:"proof"`
+	ProofID        string `json:"proofId"`
+	L1BatchNumber  string `json:"l1BatchNumber"`
+	L1BatchTxIndex string `json:"l1BatchTxIndex"`
+	Message        string `json:"message"`
 }

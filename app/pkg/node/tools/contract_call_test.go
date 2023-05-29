@@ -2,6 +2,7 @@ package tools
 
 import (
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"strings"
@@ -53,4 +54,12 @@ func TestOwnerOfCallPost(t *testing.T) {
 		}
 		t.Log(balance.String())
 	})
+}
+
+func TestGetProof(t *testing.T) {
+	got, err := GetProof("https://testnet.era.zksync.dev", "0x9b6515e714e1700b1190eb5e60b99250dab5a1631c1cde1a371a9b57a8092f53")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(got)
 }

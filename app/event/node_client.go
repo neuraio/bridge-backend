@@ -219,6 +219,15 @@ func sentTo(sourceNetworkId, destinationNetworkId networkId, destinationContract
 		return sendRawTransaction(abiObject721, client.rpcClient, destinationNetworkId, "sendTo", client.authenticator.From, client.bridgeContractAddressErc721, client.authenticator.Signer, big.NewInt(int64(sourceNetworkId)), common.HexToAddress(destinationContractAddress), big.NewInt(int64(tokenId)), common.HexToAddress(receiverAddress))
 	}
 
+	if destinationNetworkId == 280 {
+		gasPrice, err := client.rpcClient.SuggestGasPrice(context.Background())
+		if err != nil {
+			return "", fmt.Errorf("client.rpcClient.SuggestGasPrice error. err:%s", err.Error())
+		}
+		client.authenticator.GasPrice = gasPrice
+		client.authenticator.GasLimit = 0
+	}
+
 	transaction, err := client.contractCallerErc721.SendTo(client.authenticator, big.NewInt(int64(sourceNetworkId)), common.HexToAddress(destinationContractAddress), big.NewInt(int64(tokenId)), common.HexToAddress(receiverAddress))
 	if err != nil {
 		return "", err
@@ -256,7 +265,9 @@ func getTransactionResult(ctx context.Context, networkId networkId, hash string)
 		}
 		return 0, 0, err
 	}
-
+	if receipt == nil || receipt.BlockNumber == nil {
+		return 0, 0, fmt.Errorf("getTransactionResult receipt nil. networkID:%d, hash:%s", networkId, hash)
+	}
 	switch receipt.Status {
 	case 0:
 		return fail, receipt.BlockNumber.Uint64(), nil

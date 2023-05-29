@@ -48,7 +48,12 @@ func NewEventFetchThroughRpc(rpcClient *ethclient.Client, addresses []string, bl
 			FromBlock: new(big.Int),
 			ToBlock:   new(big.Int),
 			Addresses: logAddresses,
-			Topics:    [][]common.Hash{{common.HexToHash(BridgeEventTopic), common.HexToHash(BridgeBurnErc20Topic), common.HexToHash(ZkBridgeErc20Topic), common.HexToHash(ZkClaimErc20Topic)}},
+			Topics: [][]common.Hash{{common.HexToHash(BridgeEventTopic), common.HexToHash(BridgeBurnErc20Topic),
+				common.HexToHash(ZkBridgeErc20Topic), common.HexToHash(ZkClaimErc20Topic),
+				common.HexToHash(zkDepositErc20Topic),
+				common.HexToHash(zkWithdrawErc20Topic),
+				common.HexToHash(zkSyncWithdrawBlockNumTopic),
+				common.HexToHash(zkSyncFinalizeWithdrawTopic)}},
 		},
 		blockStep:                   blockStep,
 		heightDelay:                 blockDelay,
@@ -112,14 +117,13 @@ func (ef *eventFetchThroughRpc) subscribeEvents(event chan *LogEvent, nextSignal
 
 			ef.logFilter.FromBlock.SetUint64(fetchHeightFloor)
 			ef.logFilter.ToBlock.SetUint64(fetchHeightCell)
-
 			logs, err := fetchLogs(ef.ethClient, ef.logFilter)
 			if err != nil {
 				logrus.Errorf("fetch log with block %d,network: %d", fetchHeightFloor, ef.networkId)
 				mutex.Unlock()
 				goto endLoop
 			}
-
+			logrus.Debugf("ef.logFilter: begin:%d, end:%d, topics:%+v, address:%+v, logLen:%d", ef.logFilter.FromBlock.Uint64(), ef.logFilter.ToBlock.Uint64(), ef.logFilter.Topics, ef.logFilter.Addresses, len(logs))
 			for _, log := range logs {
 
 				logEvent := &LogEvent{

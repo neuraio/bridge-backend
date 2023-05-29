@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ApeGame/bridge-backend/app/pkg/node/tools"
+	"github.com/ethereum/go-ethereum/common"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -99,7 +101,7 @@ func NewEventFetchThroughGraphQL(rpcClient *ethclient.Client, graphClient *graph
 }
 
 type eventLogGraphQueryBlockModel struct {
-	Number uint64 `json:"number"`
+	Number interface{} `json:"number"`
 }
 
 type eventLogGraphQueryAccountModel struct {
@@ -134,7 +136,12 @@ func getEventLogGraphQueryWithFilters(addresses []string) string {
 		logrus.Fatalln(err)
 	}
 
-	topic, err := json.Marshal([]string{BridgeBurnErc20Topic, BridgeEventTopic, ZkBridgeErc20Topic, ZkClaimErc20Topic})
+	topic, err := json.Marshal([]string{BridgeBurnErc20Topic, BridgeEventTopic, ZkBridgeErc20Topic,
+		ZkClaimErc20Topic,
+		zkDepositErc20Topic,
+		zkWithdrawErc20Topic,
+		zkSyncWithdrawBlockNumTopic,
+		zkSyncFinalizeWithdrawTopic})
 	if err != nil {
 		logrus.Fatalln(err)
 	}
@@ -216,10 +223,34 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 					logrus.Infof("subscribeEvents fetch new event log, hash: %s, address: %s, topics: %v, data: %s...", eventLog.Transaction.Hash, eventLog.Account.Address, eventLog.Topics, eventLog.Data)
 				}
 
+				var num uint64
+				switch eventLog.Transaction.Block.Number.(type) {
+				case string:
+					n, ok := eventLog.Transaction.Block.Number.(string)
+					if !ok {
+						logrus.Errorf("subscribeEvents,  string network: %d, get block num : %v", ef.networkId, eventLog.Transaction.Block.Number)
+						mutex.Unlock()
+						goto endLoop
+					}
+					num = big.NewInt(0).SetBytes(common.FromHex(n)).Uint64()
+				case float64:
+					n, ok := eventLog.Transaction.Block.Number.(float64)
+					if !ok {
+						logrus.Errorf("subscribeEvents, float64 network: %d, get block num : %v", ef.networkId, eventLog.Transaction.Block.Number)
+						mutex.Unlock()
+						goto endLoop
+					}
+					num = uint64(n)
+
+				default:
+					logrus.Errorf("subscribeEvents, defalut network: %d, get block num : %s", ef.networkId, eventLog.Transaction.Block.Number)
+					mutex.Unlock()
+					goto endLoop
+				}
 				logEvent := &LogEvent{
 					Topic:           eventLog.Topics[0],
 					Data:            eventLog.Data,
-					blockNumber:     eventLog.Transaction.Block.Number,
+					blockNumber:     num,
 					transactionHash: eventLog.Transaction.Hash,
 					networkId:       ef.networkId,
 				}
@@ -249,7 +280,11 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 }
 
 var graphLog = func(s string) {
-	logrus.Debugln(s)
+	if len(s) > 500 {
+		logrus.Debugln(s[:500])
+	} else {
+		logrus.Debugln(s)
+	}
 }
 
 func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransaction, nextSignals map[networkId]chan struct{}, eventLog chan *LogEvent) {
@@ -285,6 +320,9 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 		}
 		if chain.BridgeContract721 != "" {
 			addresses = append(addresses, chain.BridgeContract721)
+		}
+		if len(chain.ZKL1L2Contract20) > 0 {
+			addresses = append(addresses, chain.ZKL1L2Contract20...)
 		}
 		if chain.Graph == "" {
 			eventSubscriber, err = NewEventFetchThroughRpc(rpcClient, addresses, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)

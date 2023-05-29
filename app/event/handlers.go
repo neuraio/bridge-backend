@@ -4,12 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/ApeGame/bridge-backend/app/database"
 	bridge "github.com/ApeGame/bridge-backend/app/pkg/node/abi"
+	"github.com/ApeGame/bridge-backend/app/pkg/node/tools"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"math/big"
@@ -30,6 +34,13 @@ const (
 
 	ZkBridgeErc20Topic = "0x501781209a1f8899323b96b4ef08b168df93e0a90c673d1e4cce39366cb62f9b" //event BridgeEvent (uint8 leafType, uint32 originNetwork, address originAddress, uint32 destinationNetwork, address destinationAddress, uint256 amount, bytes metadata, uint32 depositCount)
 	ZkClaimErc20Topic  = "0x25308c93ceeed162da955b3f7ce3e3f93606579e40fb92029faa9efe27545983" //event ClaimEvent (uint32 index, uint32 originNetwork, address originAddress, address destinationAddress, uint256 amount)
+
+	zkDepositErc20Topic         = "0xdd341179f4edc78148d894d0213a96d212af2cbaf223d19ef6d483bdd47ab81d" // event DepositInitiated (index_topic_1 bytes32 l2DepositTxHash, index_topic_2 address from, index_topic_3 address to, address l1Token, uint256 amount)
+	zkWithdrawErc20Topic        = "0x2fc3848834aac8e883a2d2a17a7514dc4f2d3dd268089df9b9f5d918259ef3b0" // event WithdrawalInitiated(address indexed l2Sender, address indexed l1Receiver, address indexed l2Token, uint256 amount)
+	zkL1MessageSentErc20Topic   = "0x3a36e47291f4201faf137fab081d92295bce2d53be2c6ca68ba82c7faa9ce241" // event L1MessageSent(address indexed _sender, bytes32 indexed _hash, bytes _message)
+	zkSyncWithdrawBlockNumTopic = "0x2402307311a4d6604e4e7b4c8a15a7e1213edb39c16a31efa70afb06030d3165"
+	zkSyncFinalizeWithdrawTopic = "0xac1b18083978656d557d6e91c88203585cfda1031bdb14538327121ef140d383"
+	zkDepositRefundErc20Topic   = "0xbe066dc591f4a444f75176d387c3e6c775e5706d9ea9a91d11eb49030c66cf60"
 )
 
 type Erc20ContractAddress struct {
@@ -38,6 +49,7 @@ type Erc20ContractAddress struct {
 	MinimumFee            *big.Int
 	RollupContractAddress string
 	DstNetworkId          networkId
+	LDstNetworkId         networkId // l1 l2 network id
 }
 
 var senderLocker = make(map[networkId]map[common.Address]*sync.Mutex)
@@ -57,7 +69,7 @@ type multiplexer struct {
 }
 
 var defaultMultiplexer = multiplexer{handlers: make(map[string]eventHandler)}
-var abiObject721, abiObject20, abiZkObject20 *abi.ABI
+var abiObject721, abiObject20, abiZkObject20, l1ZkObject20, l1ZkMsgSenderObject20, l2ZkObject20 *abi.ABI
 
 var _ eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
 	// double check
@@ -273,24 +285,6 @@ var bridgeEventZKClaimErc20Handle eventHandlerFunction = func(event *LogEvent, t
 
 		return mysqlClient.Save(recorder).Error
 	}
-	//recorder := &database.BridgeHistory{
-	//	Model: gorm.Model{ID: oldRecord.ID},
-	//	//ProtocolType: database.Erc20,
-	//
-	//	//SourceNetworkId:       int(bridgeEvent.OriginNetwork),
-	//	//SourceContractAddress: bridgeEvent.OriginAddress.String(),
-	//	//SourceBlockHeight:     event.blockNumber,
-	//	//SourceTransactionHash: event.transactionHash,
-	//	//SourceAddress: bridgeEvent.Sender.Hex(),
-	//	DestinationNetworkId: int(event.networkId),
-	//	//DestinationContractAddress: ,
-	//	DestinationBlockHeight:     event.blockNumber,
-	//	DestinationTransactionHash: event.transactionHash,
-	//	DestinationAddress:         bridgeEvent.DestinationAddress.String(),
-	//
-	//	//Erc20Amount: bridgeEvent.Amount.String(),
-	//	Status: database.NftBridgeSuccess,
-	//}
 
 	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", oldRecord.ID).Updates(map[string]interface{}{"destination_network_id": int(event.networkId),
 		"destination_block_height": event.blockNumber, "destination_transaction_hash": event.transactionHash,
@@ -364,6 +358,310 @@ var bridgeEventZKBridgeErc20Handle eventHandlerFunction = func(event *LogEvent, 
 	return mysqlClient.Save(recorder).Error
 }
 
+var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	if event.Topic != zkDepositErc20Topic {
+		return errors.New("invalid topic")
+	}
+
+	if len(event.Args) < 3 {
+		return errors.New("invalid event log lacking of args")
+	}
+
+	if len(event.Data) <= 2 {
+		return errors.New("invalid event log without data")
+	}
+
+	// deserialization
+	bridgeEvent := new(bridge.L1ERC20BridgeDepositInitiated)
+	hexData, err := hex.DecodeString(event.Data[2:])
+	if err != nil {
+		return err
+	}
+
+	if err := l1ZkObject20.UnpackIntoInterface(bridgeEvent, "DepositInitiated", hexData); err != nil {
+		return err
+	}
+
+	rollupTokenAddress, dstNetwork := getRollUpTokenAddress(event.networkId)
+	if rollupTokenAddress == "" || dstNetwork == 0 {
+		logrus.Warnf("[Skip] bridgeEventZKSyncDepositErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+	if strings.ToLower(bridgeEvent.L1Token.String()) != strings.ToLower(rollupTokenAddress) {
+		return nil
+	}
+	recorder := &database.BridgeHistory{
+		ProtocolType: database.Erc20,
+
+		SourceNetworkId:       int(event.networkId),
+		SourceBlockHeight:     event.blockNumber,
+		SourceTransactionHash: event.transactionHash,
+		SourceAddress:         common.HexToAddress(event.Args[1]).String(),
+		SourceContractAddress: bridgeEvent.L1Token.String(),
+
+		DestinationNetworkId:       int(dstNetwork),
+		DestinationTransactionHash: event.Args[0],
+		DestinationAddress:         common.HexToAddress(event.Args[2]).String(),
+		Erc20Amount:                bridgeEvent.Amount.String(),
+
+		Status: database.NftBridgeDepositing,
+	}
+
+	logrus.Debugf("bridgeEventZKSyncDepositErc20Handle %v", recorder)
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+	if err := mysqlClient.Create(recorder).Error; err != nil {
+		logrus.Errorf("bridgeEventZKSyncDepositErc20Handle mysqlClient.Save(recorder) %s", err)
+		return err
+	}
+	return nil
+}
+
+var bridgeEventZKWithdrawErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	if event.Topic != zkWithdrawErc20Topic {
+		return errors.New("invalid topic")
+	}
+
+	if len(event.Args) < 3 {
+		return errors.New("invalid event log lacking of args")
+	}
+
+	if len(event.Data) <= 2 {
+		return errors.New("invalid event log without data")
+	}
+
+	// deserialization
+	bridgeEvent := new(bridge.L2ERC20BridgeWithdrawalInitiated)
+	hexData, err := hex.DecodeString(event.Data[2:])
+	if err != nil {
+		return err
+	}
+
+	if err := l2ZkObject20.UnpackIntoInterface(bridgeEvent, "WithdrawalInitiated", hexData); err != nil {
+		return err
+	}
+
+	rollupTokenAddress, dstNetwork := getRollUpTokenAddress(event.networkId)
+	if rollupTokenAddress == "" || dstNetwork == 0 {
+		logrus.Warnf("[Skip] bridgeEventZKWithdrawErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+	if strings.ToLower(common.HexToAddress(event.Args[2]).String()) != strings.ToLower(rollupTokenAddress) {
+		return nil
+	}
+
+	recorder := &database.BridgeHistory{
+		ProtocolType: database.Erc20,
+
+		SourceNetworkId:       int(event.networkId),
+		SourceBlockHeight:     event.blockNumber,
+		SourceTransactionHash: event.transactionHash,
+		SourceAddress:         common.HexToAddress(event.Args[0]).String(),
+		SourceContractAddress: common.HexToAddress(event.Args[2]).String(),
+
+		DestinationNetworkId: int(dstNetwork),
+		DestinationAddress:   common.HexToAddress(event.Args[1]).String(),
+		Erc20Amount:          bridgeEvent.Amount.String(),
+		Status:               database.NftBridgeWithdrawing,
+	}
+
+	logrus.Debugf("bridgeEventZKWithdrawErc20Handle %v", recorder)
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+
+	return mysqlClient.Save(recorder).Error
+}
+
+var bridgeEventZKSyncWithdrawBlockNumErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	if event.Topic != zkSyncWithdrawBlockNumTopic {
+		return errors.New("invalid topic")
+	}
+
+	if len(event.Args) < 3 {
+		return errors.New("invalid event log lacking of args")
+	}
+
+	height := big.NewInt(0).SetBytes(common.FromHex(event.Args[0]))
+
+	recorder := &database.SyncZkProgressRecord{
+		CreatedAt:   time.Now(),
+		BlockHeight: height.Uint64(),
+		NetworkId:   int(event.networkId),
+		Type:        database.SyncZkFinalizeWithdrawalHeight,
+	}
+
+	logrus.Debugf("bridgeEventZKSyncWithdrawBlockNumErc20Handle %v", recorder)
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+
+	return mysqlClient.Save(recorder).Error
+}
+
+var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	if event.Topic != zkSyncFinalizeWithdrawTopic {
+		return errors.New("invalid topic")
+	}
+
+	if len(event.Args) < 2 {
+		return errors.New("invalid event log lacking of args")
+	}
+
+	l1Token := common.HexToAddress(event.Args[1]).String()
+	rollupTokenAddress, dstNetwork := getRollUpTokenAddress(event.networkId)
+	if rollupTokenAddress == "" || dstNetwork == 0 {
+		logrus.Warnf("[Skip] bridgeEventZKSyncFinalizeWithdrawErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+	if strings.ToLower(l1Token) != strings.ToLower(rollupTokenAddress) {
+		logrus.Errorf("l1Token:%s", l1Token)
+		logrus.Errorf("rollupTokenAddress:%s", rollupTokenAddress)
+		logrus.Warnf("[Skip] bridgeEventZKSyncFinalizeWithdrawErc20Handle l1Token != rollupTokenAddress. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+
+	client, found := nodeClients[event.networkId]
+	if !found {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle nodeClients[event.networkId] error. networkID:%s", event.networkId)
+		return fmt.Errorf("client not found: %d", event.networkId)
+	}
+	tx, _, err := client.rpcClient.TransactionByHash(context.Background(), common.HexToHash(event.transactionHash))
+	if err != nil {
+		if errors.Is(err, ethereum.NotFound) {
+			logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle TransactionByHash error. transactionHash:%s", event.transactionHash)
+			return err
+		}
+		return err
+	}
+
+	// decode input data
+	parsed, _ := abi.JSON(strings.NewReader(bridge.L1ERC20BridgeABI))
+	// 解码输入数据
+	res, err := parsed.Methods["finalizeWithdrawal"].Inputs.Unpack(tx.Data()[4:])
+	if err != nil {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s", event.transactionHash)
+		return err
+	}
+	var out FinalizeWithdrawalInput
+	parsed.Methods["finalizeWithdrawal"].Inputs.Copy(&out, res)
+
+	//l2BlockNumber == l1_batch_number
+	//l2MessageIndex == proof_id
+	//l2TxNumberInBlock == l1_batch_tx_index
+
+	extra := &database.BridgeHistoryExtra{}
+	if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
+		Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", hexutil.EncodeBig(out.L2BlockNumber),
+			out.L2MessageIndex.Uint64(), hexutil.EncodeBig(big.NewInt(int64(out.L2TxNumberInBlock)))).First(&extra).Error; err != nil {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle BridgeHistoryExtra error. transactionHash:%s", event.transactionHash)
+		return err
+	}
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+
+	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", extra.ID).Updates(map[string]interface{}{"destination_block_height": event.blockNumber, "status": database.NftBridgeSuccess}).Error
+}
+
+var bridgeEventZKDepositRefundErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	if event.Topic != zkDepositRefundErc20Topic {
+		return errors.New("invalid topic")
+	}
+
+	if len(event.Args) < 2 {
+		return errors.New("invalid event log lacking of args")
+	}
+
+	if len(event.Data) <= 2 {
+		return errors.New("invalid event log without data")
+	}
+
+	// deserialization
+	bridgeEvent := new(bridge.L1ERC20BridgeClaimedFailedDeposit)
+	hexData, err := hex.DecodeString(event.Data[2:])
+	if err != nil {
+		return err
+	}
+
+	if err := l1ZkObject20.UnpackIntoInterface(bridgeEvent, " ClaimedFailedDeposit", hexData); err != nil {
+		return err
+	}
+
+	rollupTokenAddress, dstNetwork := getRollUpTokenAddress(event.networkId)
+	if rollupTokenAddress == "" || dstNetwork == 0 {
+		logrus.Warnf("[Skip] bridgeEventZKDepositRefundErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+	if strings.ToLower(bridgeEvent.L1Token.String()) != strings.ToLower(rollupTokenAddress) {
+		logrus.Warnf("[Skip] bridgeEventZKDepositRefundErc20Handle l1Token != rollupTokenAddress. Transaction Hash: %s", event.transactionHash)
+		return nil
+	}
+
+	client, found := nodeClients[event.networkId]
+	if !found {
+		logrus.Errorf("bridgeEventZKDepositRefundErc20Handle nodeClients[event.networkId] error. networkID:%d", event.networkId)
+		return fmt.Errorf("client not found: %d", event.networkId)
+	}
+	tx, _, err := client.rpcClient.TransactionByHash(context.Background(), common.HexToHash(event.transactionHash))
+	if err != nil {
+		if errors.Is(err, ethereum.NotFound) {
+			logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle TransactionByHash error. transactionHash:%s", event.transactionHash)
+			return err
+		}
+		return err
+	}
+
+	// decode input data
+	parsed, _ := abi.JSON(strings.NewReader(bridge.L1ERC20BridgeABI))
+	// 解码输入数据
+	res, err := parsed.Methods["finalizeWithdrawal"].Inputs.Unpack(tx.Data()[4:])
+	if err != nil {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s", event.transactionHash)
+		return err
+	}
+	var out FinalizeWithdrawalInput
+	parsed.Methods["claimFailedDeposit"].Inputs.Copy(&out, res)
+
+	//l2BlockNumber == l1_batch_number
+	//l2MessageIndex == proof_id
+	//l2TxNumberInBlock == l1_batch_tx_index
+
+	extra := &database.BridgeHistoryExtra{}
+	if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
+		Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", hexutil.EncodeBig(out.L2BlockNumber),
+			out.L2MessageIndex.Uint64(), hexutil.EncodeBig(big.NewInt(int64(out.L2TxNumberInBlock)))).First(&extra).Error; err != nil {
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle BridgeHistoryExtra error. transactionHash:%s", event.transactionHash)
+		return err
+	}
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+
+	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", extra.ID).Updates(map[string]interface{}{"destination_block_height": event.blockNumber, "status": database.NftBridgeSuccess}).Error
+}
+
+type ClaimFailedDeposit struct {
+	L2TxHash *big.Int `json:"_l2TxHash"`
+}
+
+type FinalizeWithdrawalInput struct {
+	L2BlockNumber     *big.Int `json:"_l2BlockNumber"`
+	L2MessageIndex    *big.Int `json:"_l2MessageIndex"`
+	L2TxNumberInBlock uint16   `json:"_l2TxNumberInBlock"`
+}
+
 func getDestinationContractAddress(sourceNetwork, destinationNetwork networkId, sourceContractAddress string) (string, *big.Int) {
 	erc20ContractPairsLocker.Lock()
 	defer erc20ContractPairsLocker.Unlock()
@@ -425,6 +723,31 @@ func getRollUpContractAddress(sourceNetwork networkId) (string, networkId) {
 	return rollupContractAddress, dstNetworkID
 }
 
+func getRollUpTokenAddress(sourceNetwork networkId) (string, networkId) {
+	erc20ContractPairsLocker.Lock()
+	defer erc20ContractPairsLocker.Unlock()
+
+	if len(erc20ContractPairs) == 0 {
+		logrus.Error("getRollUpTokenAddress erc20ContractPairs ==0 ")
+		return "", 0
+	}
+	//logrus.Debugf("getRollUpContractAddress sourceNetwork :%d,  erc20ContractPairs:%+v", sourceNetwork, erc20ContractPairs)
+	rollupTokenAddress := ""
+	var dstNetworkID networkId = 0
+	for _, erc20ContractPair := range erc20ContractPairs {
+		for j := range erc20ContractPair {
+			if erc20ContractPair[j].NetworkId == sourceNetwork && erc20ContractPair[j].LDstNetworkId > 0 {
+				rollupTokenAddress = erc20ContractPair[j].ContractAddress
+				dstNetworkID = erc20ContractPair[j].LDstNetworkId
+			}
+		}
+	}
+	if rollupTokenAddress == "" || dstNetworkID == 0 {
+		return "", 0
+	}
+	return rollupTokenAddress, dstNetworkID
+}
+
 var cronJobs = make([]cronJobFunction, 0)
 
 func (hf eventHandlerFunction) handle(event *LogEvent, transaction dataRecorderTransaction) error {
@@ -460,6 +783,7 @@ func registerErc20ContractPairs(chainIds []networkId) {
 			MinimumFee:            minimumFee,
 			RollupContractAddress: erc20ContractPairsConfiguration[i].RollupContractAddress,
 			DstNetworkId:          networkId(erc20ContractPairsConfiguration[i].DstNetworkId),
+			LDstNetworkId:         networkId(erc20ContractPairsConfiguration[i].LDstNetworkId),
 		})
 	}
 
@@ -478,6 +802,7 @@ func registerErc20ContractPairs(chainIds []networkId) {
 				MinimumFee:            pair.MinimumFee,
 				RollupContractAddress: pair.RollupContractAddress,
 				DstNetworkId:          pair.DstNetworkId,
+				LDstNetworkId:         pair.LDstNetworkId,
 			})
 		}
 	}
@@ -520,14 +845,39 @@ func init() {
 		panic(e)
 	}
 	abiZkObject20 = z
+	l1Erc20B, err := bridge.L1ERC20BridgeMetaData.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+	l1ZkObject20 = l1Erc20B
+	l2Erc20B, err := bridge.L2ERC20BridgeMetaData.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+	l2ZkObject20 = l2Erc20B
+
+	l1MsgErc20B, err := bridge.L1MessageSenderMetaData.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+	l1ZkMsgSenderObject20 = l1MsgErc20B
+
 	// register handler
 	// registerHandlerFunction(mintEventTopic, mintEventHandle)
 	registerHandlerFunction(BridgeEventTopic, bridgeEventHandle)
 	registerHandlerFunction(BridgeBurnErc20Topic, bridgeEventBurnErc20Handle)
 	registerHandlerFunction(ZkBridgeErc20Topic, bridgeEventZKBridgeErc20Handle)
 	registerHandlerFunction(ZkClaimErc20Topic, bridgeEventZKClaimErc20Handle)
+	registerHandlerFunction(zkDepositErc20Topic, bridgeEventZKDepositErc20Handle)
+	registerHandlerFunction(zkWithdrawErc20Topic, bridgeEventZKWithdrawErc20Handle)
+	registerHandlerFunction(zkSyncWithdrawBlockNumTopic, bridgeEventZKSyncWithdrawBlockNumErc20Handle)
+	registerHandlerFunction(zkSyncFinalizeWithdrawTopic, bridgeEventZKSyncFinalizeWithdrawErc20Handle)
 
-	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(10*time.Second, jobSendFtToken), cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken), cronJobWrapper(10*time.Second, jobRefundTransactionResult))
+	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(10*time.Second, jobSendFtToken),
+		cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken),
+		cronJobWrapper(10*time.Second, jobRefundTransactionResult), cronJobWrapper(10*time.Second, jobZkDepositToken),
+		cronJobWrapper(10*time.Second, jobZkWithdrawToken),
+	)
 }
 
 func HandleEvent(topic string, event *LogEvent, transaction dataRecorderTransaction) error {
@@ -573,6 +923,211 @@ func isAlreadyMinted(err error) bool {
 		return true
 	}
 	return false
+}
+
+func jobZkDepositToken(_ context.Context) error {
+	bridgeHistories := make([]database.BridgeHistory, 0)
+	if err := database.GetMysqlClient().Where("status = ?  and destination_transaction_hash != ''", database.NftBridgeDepositing).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
+		return err
+	}
+	for _, bridgeHistory := range bridgeHistories {
+		status, blockHeight, err := getTransactionResult(context.Background(), networkId(bridgeHistory.DestinationNetworkId), bridgeHistory.DestinationTransactionHash)
+		if err != nil {
+			logrus.Errorf("record id: %d, error message: %s", bridgeHistory.ID, err.Error())
+			continue
+		} else if status == unknown {
+			continue
+		}
+
+		bridgeHistory.DestinationBlockHeight = blockHeight
+
+		if status == success {
+			bridgeHistory.Status = database.NftBridgeSuccess
+		} else {
+			bridgeHistory.Status = database.NftBridgeFail
+		}
+
+		if err := database.GetMysqlClient().Save(&bridgeHistory).Error; err != nil {
+			logrus.Error(err)
+		}
+	}
+	return nil
+}
+
+func jobZkWithdrawToken(_ context.Context) error {
+	bridgeHistories := make([]database.BridgeHistory, 0)
+	if err := database.GetMysqlClient().Where("status = ?", database.NftBridgeWithdrawing).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
+		return err
+	}
+	if len(bridgeHistories) == 0 {
+		return nil
+	}
+	ids := make([]uint, len(bridgeHistories))
+	for i, bridgeHistory := range bridgeHistories {
+		ids[i] = bridgeHistory.ID
+	}
+	bhes := make([]*database.BridgeHistoryExtra, 0)
+
+	if err := database.GetMysqlClient().Where("id in (?)", ids).Find(&bhes).Error; err != nil {
+		return err
+	}
+	bhesMap := make(map[uint]*database.BridgeHistoryExtra)
+	for _, bhe := range bhes {
+		bhesMap[bhe.ID] = bhe
+	}
+	for _, bridgeHistory := range bridgeHistories {
+		extra, ok := bhesMap[bridgeHistory.ID]
+		if !ok {
+			extra = &database.BridgeHistoryExtra{
+				ID: bridgeHistory.ID,
+			}
+		}
+		client, found := nodeClients[networkId(bridgeHistory.SourceNetworkId)]
+		if !found {
+			return fmt.Errorf("client not found: %d", bridgeHistory.SourceNetworkId)
+		}
+		if extra.Message == "" {
+			receipt, err := client.rpcClient.TransactionReceipt(context.Background(), common.HexToHash(bridgeHistory.SourceTransactionHash))
+			if err != nil {
+				return err
+			}
+
+			for _, log := range receipt.Logs {
+				if len(log.Topics) > 0 && log.Topics[0].Hex() == zkL1MessageSentErc20Topic {
+					bridgeEvent := new(bridge.L1MessageSenderL1MessageSent)
+					if err := l1ZkMsgSenderObject20.UnpackIntoInterface(bridgeEvent, "L1MessageSent", log.Data); err != nil {
+						logrus.Errorf("l1ZkMsgSenderObject20.UnpackIntoInterface error. err: %s", err)
+						break
+					}
+					extra.Message = hexutil.Encode(bridgeEvent.Message)
+					break
+				}
+			}
+		}
+		if extra.Proof == "" || extra.ProofID == "" {
+			proof, err := tools.GetProof(client.rpcEndpoint, bridgeHistory.SourceTransactionHash)
+			if err != nil {
+				logrus.Errorf("tools.GetProof error. err: %s", err)
+				continue
+			}
+			proofMar, err := json.Marshal(proof.Proof)
+			if err != nil {
+				return err
+			}
+			extra.Proof = string(proofMar)
+			extra.ProofID = fmt.Sprint(proof.ID)
+		}
+		if extra.L1BatchNumber == "" || extra.L1BatchTxIndex == "" {
+			batch, err := tools.GetTxL1Batch(client.rpcEndpoint, bridgeHistory.SourceTransactionHash)
+			if err != nil {
+				logrus.Errorf("tools.GetTxL1Batch error. err: %s", err)
+				continue
+			}
+			extra.L1BatchNumber = batch.L1BatchNumber
+			extra.L1BatchTxIndex = batch.L1BatchTxIndex
+		}
+
+		if err := database.GetMysqlClient().Save(&extra).Error; err != nil {
+			logrus.Error(err)
+		}
+		height := &database.SyncZkProgressRecord{}
+		if err := database.GetMysqlClient().Model(&database.SyncZkProgressRecord{}).
+			Where("network_id = ? and type = ?", bridgeHistory.DestinationNetworkId, database.SyncZkFinalizeWithdrawalHeight).
+			First(&height).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return err
+			}
+		}
+		l1BatchNum := big.NewInt(0).SetBytes(common.FromHex(extra.L1BatchNumber)).Uint64()
+
+		logrus.Debugf("extra.Message:%d", l1BatchNum)
+		if extra.Message != "" && extra.Proof != "" && extra.ProofID != "" && extra.L1BatchNumber != "" && extra.L1BatchTxIndex != "" && height.BlockHeight >= l1BatchNum {
+			bridgeHistory.Status = database.NftBridgeFinalizeWithdrawal
+		}
+
+		if err := database.GetMysqlClient().Save(&bridgeHistory).Error; err != nil {
+			logrus.Error(err)
+		}
+	}
+
+	return nil
+}
+
+func jobZkDepositRefundToken(_ context.Context) error {
+	bridgeHistories := make([]database.BridgeHistory, 0)
+	if err := database.GetMysqlClient().Where("status = ?", database.NftBridgeDepositRefund).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
+		return err
+	}
+	ids := make([]uint, len(bridgeHistories))
+	for i, bridgeHistory := range bridgeHistories {
+		ids[i] = bridgeHistory.ID
+	}
+	bhes := make([]*database.BridgeHistoryExtra, 0)
+	if err := database.GetMysqlClient().Where("id in (?)", ids).Find(&bhes).Error; err != nil {
+		return err
+	}
+	bhesMap := make(map[uint]*database.BridgeHistoryExtra)
+	for _, bhe := range bhes {
+		bhesMap[bhe.ID] = bhe
+	}
+
+	for _, bridgeHistory := range bridgeHistories {
+		extra, ok := bhesMap[bridgeHistory.ID]
+		if !ok {
+			extra = &database.BridgeHistoryExtra{
+				ID: bridgeHistory.ID,
+			}
+		}
+		client, found := nodeClients[networkId(bridgeHistory.SourceNetworkId)]
+		if !found {
+			return fmt.Errorf("client not found: %d", bridgeHistory.SourceNetworkId)
+		}
+
+		if extra.Proof == "" || extra.ProofID == "" {
+			proof, err := tools.GetProof(client.rpcEndpoint, bridgeHistory.SourceTransactionHash)
+			if err != nil {
+				logrus.Errorf("tools.GetProof error. err: %s", err)
+				continue
+			}
+			proofMar, err := json.Marshal(proof.Proof)
+			if err != nil {
+				return err
+			}
+			extra.Proof = string(proofMar)
+			extra.ProofID = fmt.Sprint(proof.ID)
+		}
+		if extra.L1BatchNumber == "" || extra.L1BatchTxIndex == "" {
+			batch, err := tools.GetTxL1Batch(client.rpcEndpoint, bridgeHistory.SourceTransactionHash)
+			if err != nil {
+				logrus.Errorf("tools.GetTxL1Batch error. err: %s", err)
+				continue
+			}
+			extra.L1BatchNumber = batch.L1BatchNumber
+			extra.L1BatchTxIndex = batch.L1BatchTxIndex
+		}
+
+		if err := database.GetMysqlClient().Save(&extra).Error; err != nil {
+			logrus.Error(err)
+		}
+
+		//l2BlockNumber == l1_batch_number
+		//l2MessageIndex == proof_id
+		//l2TxNumberInBlock == l1_batch_tx_index
+
+		//l2MessageIndex proof_id
+		//l2TxNumberInBlock l1_batch_tx_index
+		//merkleProof Proof
+
+		//if extra.Proof != "" && extra.ProofID != "" && extra.L1BatchNumber != "" && extra.L1BatchTxIndex != "" {
+		//	bridgeHistory.Status = database.NftBridgeFinalizeWithdrawal
+		//}
+
+		//if err := database.GetMysqlClient().Save(&bridgeHistory).Error; err != nil {
+		//	logrus.Error(err)
+		//}
+	}
+
+	return nil
 }
 
 func jobSendFtToken(_ context.Context) error {
