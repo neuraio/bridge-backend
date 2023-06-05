@@ -170,7 +170,7 @@ func MintTokens(destinationNetworkId networkId, bridges []*ercBridge) (string, e
 		fs = append(fs, v.Fee)
 	}
 
-	return sendRawTransaction(abiObject20, client.rpcClient, destinationNetworkId, "mintTokens", client.authenticator.From, client.bridgeContractAddressErc20, client.authenticator.Signer, reqs, signs, ts, fs)
+	return sendRawTransactionFT(abiObject20, client.rpcClient, destinationNetworkId, "mintTokens", client.authenticator.From, client.bridgeContractAddressErc20, client.authenticator.Signer, len(reqs), reqs, signs, ts, fs)
 }
 
 func MintToken(destinationNetworkId, sourceNetworkId networkId, burnId, destinationContractAddress, senderAddress, receiverAddress, amountS, feeS string) (string, error) {
@@ -303,6 +303,60 @@ func sendRawTransaction(abi *abi.ABI, client *ethclient.Client, network networkI
 		Data:     input,
 		GasPrice: gasPrice,
 		Gas:      defaultGas,
+		Value:    new(big.Int),
+	}
+
+	signedTx, err := signer(sender, types.NewTx(baseTx))
+	if err != nil {
+		return "", err
+	}
+
+	l, f := senderLocker[network]
+	if !f || l == nil {
+		return "", fmt.Errorf("wierd! Can't find locker of network %d", network)
+	}
+
+	locker, found := l[sender]
+	if !found || locker == nil {
+		return "", fmt.Errorf("wierd! Can't find locker of sender %s", sender.String())
+	}
+
+	locker.Lock()
+	defer locker.Unlock()
+
+	return signedTx.Hash().Hex(), client.SendTransaction(ctx, signedTx)
+}
+
+func sendRawTransactionFT(abi *abi.ABI, client *ethclient.Client, network networkId, method string, sender, contract common.Address, signer bind.SignerFn, reqLen int, params ...interface{}) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	input, err := abi.Pack(method, params...)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := client.PendingNonceAt(ctx, sender)
+	if err != nil {
+		return "", err
+	}
+
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	gas := defaultGas * reqLen
+	if gas > 20000000 {
+		gas = 20000000
+	}
+
+	baseTx := &types.LegacyTx{
+		Nonce:    nonce,
+		To:       &contract,
+		Data:     input,
+		GasPrice: gasPrice,
+		Gas:      uint64(gas),
 		Value:    new(big.Int),
 	}
 
