@@ -170,7 +170,7 @@ func MintTokens(destinationNetworkId networkId, bridges []*ercBridge) (string, e
 		fs = append(fs, v.Fee)
 	}
 
-	return sendRawTransactionFT(abiObject20, client.rpcClient, destinationNetworkId, "mintTokens", client.authenticator.From, client.bridgeContractAddressErc20, client.authenticator.Signer, len(reqs), reqs, signs, ts, fs)
+	return sendRawTransaction(abiObject20, client.rpcClient, destinationNetworkId, "mintTokens", client.authenticator.From, client.bridgeContractAddressErc20, client.authenticator.Signer, reqs, signs, ts, fs)
 }
 
 func MintToken(destinationNetworkId, sourceNetworkId networkId, burnId, destinationContractAddress, senderAddress, receiverAddress, amountS, feeS string) (string, error) {
