@@ -22,7 +22,7 @@ import (
 var PoolBalanceInsufficient = make(map[string]bool, 0)
 var PoolBalanceInsufficientError = errors.New("pool balance insufficient")
 
-const defaultGas = 400000
+const defaultGas = 19990000
 
 type erc20MintSignFn func(address, bridge common.Address, sender, receiver, token string, burnId [32]byte, amount, fee, sourceNetworkId, destinationNetworkId *big.Int) (string, error)
 type erc20MultipleMintSignFn func(address, bridge common.Address, destinationNetworkId *big.Int, bridges []bridge.BridgeMintReq) ([]string, error)
