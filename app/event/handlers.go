@@ -873,7 +873,7 @@ func init() {
 	registerHandlerFunction(zkSyncWithdrawBlockNumTopic, bridgeEventZKSyncWithdrawBlockNumErc20Handle)
 	registerHandlerFunction(zkSyncFinalizeWithdrawTopic, bridgeEventZKSyncFinalizeWithdrawErc20Handle)
 
-	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(1*time.Minute, jobSendFtToken),
+	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(4*time.Minute, jobSendFtToken),
 		cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken),
 		cronJobWrapper(10*time.Second, jobRefundTransactionResult), cronJobWrapper(10*time.Second, jobZkDepositToken),
 		cronJobWrapper(10*time.Second, jobZkWithdrawToken),
