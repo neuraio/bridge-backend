@@ -1179,6 +1179,7 @@ func jobSendFtToken(_ context.Context) error {
 
 		if gasPrice.Cmp(big.NewInt(1e9)) == 1 {
 			logrus.Infoln("gas price is over 1e9 wait")
+			continue
 		}
 
 		bridgeHistories := make([]*database.BridgeHistory, 0)
