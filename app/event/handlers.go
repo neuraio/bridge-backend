@@ -1166,6 +1166,21 @@ func jobSendFtToken(_ context.Context) error {
 	}
 	logrus.Debugf("jobSendFtToken networks len:%d", len(networks))
 	for network := range networks {
+		client, found := nodeClients[networkId(network)]
+		if !found {
+			return fmt.Errorf("client not found: %d", networkId(network))
+		}
+
+		gasPrice, err := client.rpcClient.SuggestGasPrice(context.Background())
+		if err != nil {
+			logrus.Errorln(err)
+			continue
+		}
+
+		if gasPrice.Cmp(big.NewInt(1e9)) == 1 {
+			logrus.Infoln("gas price is over 1e9 wait")
+		}
+
 		bridgeHistories := make([]*database.BridgeHistory, 0)
 		if err := database.GetMysqlClient().Where("status = ? AND protocol_type = ? AND destination_network_id = ?", database.NftBridgeUndo, database.Erc20, network).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
 			return err
