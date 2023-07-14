@@ -766,9 +766,13 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 	if err := mysqlClient.Where(&database.BridgeHistory{
 		MsgHash: msgHash,
 	}).First(&oldRecord).Error; err != nil {
-		if err != gorm.ErrRecordNotFound {
-			return err
+		if err == gorm.ErrRecordNotFound {
+			return nil
 		}
+		return err
+	}
+	if oldRecord.ID == 0 {
+		return nil
 	}
 
 	client, found := nodeClients[event.networkId]
