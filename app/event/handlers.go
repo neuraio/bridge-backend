@@ -708,10 +708,9 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 	}
 	msgHash := ""
 	for _, log := range tx.Logs {
-		for _, topic := range log.Topics {
-			if topic.Hex() == lineaMessageSentErc20Topic {
-				msgHash = log.Topics[3].Hex()
-			}
+		if len(log.Topics) > 0 && log.Topics[0].Hex() == lineaMessageSentErc20Topic {
+			msgHash = log.Topics[3].Hex()
+			break
 		}
 	}
 
