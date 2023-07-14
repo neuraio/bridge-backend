@@ -141,7 +141,10 @@ func getEventLogGraphQueryWithFilters(addresses []string) string {
 		zkDepositErc20Topic,
 		zkWithdrawErc20Topic,
 		zkSyncWithdrawBlockNumTopic,
-		zkSyncFinalizeWithdrawTopic})
+		zkSyncFinalizeWithdrawTopic,
+		lineaMessageSentErc20Topic,
+		lineaMessageClaimErc20Topic,
+	})
 	if err != nil {
 		logrus.Fatalln(err)
 	}
