@@ -54,6 +54,7 @@ type BridgeHistory struct {
 	Fee                        string   `json:"fee"`
 
 	DepositCount uint64 // ZK Bridge attribute
+	MsgHash      string `json:"msgHash"` // linea attribute
 }
 
 type Erc721BridgeContractAddress struct {
