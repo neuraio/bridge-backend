@@ -790,8 +790,8 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 	for _, log := range receipt.Logs {
 		if len(log.Topics) > 0 && log.Topics[0].Hex() == lineaBridgingFinalizedErc20Topic {
 			bridgeEvent := new(bridge.LineaTokenBridgeBridgingFinalized)
-			if err := lineaZkevm20.UnpackIntoInterface(bridgeEvent, "BridgingFinalized", log.Data); err != nil {
-				logrus.Errorf("l1ZkMsgSenderObject20.UnpackIntoInterface error. err: %s", err)
+			if err := lineaTokenBridge20.UnpackIntoInterface(bridgeEvent, "BridgingFinalized", log.Data); err != nil {
+				logrus.Errorf("lineaZkevm20.UnpackIntoInterface error. err: %s", err)
 				break
 			}
 			dstContractAddress = bridgeEvent.BridgedToken.Hex()
