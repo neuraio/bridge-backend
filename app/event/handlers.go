@@ -46,6 +46,7 @@ const (
 	lineaBridgingInitiatedErc20Topic = "0xde5fcf0a1aebed387067eb25655de732ccfc43fe5b5a3d91d367c26e773fcd1c" // event BridgingInitiated (address sender, address recipient, address token, uint256 amount)
 	lineaMessageClaimErc20Topic      = "0xa4c827e719e911e8f19393ccdb85b5102f08f0910604d340ba38390b7ff2ab0e" // event MessageClaimed(bytes32 indexed _messageHash)
 	lineaMessageSentErc20Topic       = "0xe856c2b8bd4eb0027ce32eeaf595c21b0b6b4644b326e5b7bd80a1cf8db72e6c" // MessageSent (index_topic_1 address _from, index_topic_2 address _to, uint256 _fee, uint256 _value, uint256 _nonce, bytes _calldata, index_topic_3 bytes32 _messageHash)
+	lineaBridgingFinalizedErc20Topic = "0xd28a2d30314c6a2f46b657c15ee4d7ffc33b2817e78f341a260e216cebfbdbef" // BridgingFinalized (address nativeToken, address bridgedToken, uint256 amount, address recipient)
 )
 
 type Erc20ContractAddress struct {
@@ -778,7 +779,7 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 		logrus.Errorf("bridgeEventLineaMessageClaimErc20Handle nodeClients[event.networkId] error. networkID:%d", event.networkId)
 		return fmt.Errorf("client not found: %d", event.networkId)
 	}
-	tx, _, err := client.rpcClient.TransactionByHash(context.Background(), common.HexToHash(event.transactionHash))
+	receipt, err := client.rpcClient.TransactionReceipt(context.Background(), common.HexToHash(event.transactionHash))
 	if err != nil {
 		if errors.Is(err, ethereum.NotFound) {
 			logrus.Errorf("bridgeEventLineaMessageClaimErc20Handle TransactionByHash error. transactionHash:%s", event.transactionHash)
@@ -786,23 +787,23 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 		}
 		return err
 	}
-
-	// decode input data
-	parsed, _ := abi.JSON(strings.NewReader(bridge.LineaZkevmV2ABI))
-	// 解码输入数据
-	res, err := parsed.Methods["BridgingFinalized"].Inputs.Unpack(tx.Data()[4:])
-	if err != nil {
-		logrus.Errorf("bridgeEventLineaMessageClaimErc20Handle parsed.Methods[\"BridgingInitiated\"] error. transactionHash:%s", event.transactionHash)
-		return err
+	dstContractAddress := ""
+	for _, log := range receipt.Logs {
+		if len(log.Topics) > 0 && log.Topics[0].Hex() == lineaBridgingFinalizedErc20Topic {
+			bridgeEvent := new(bridge.LineaTokenBridgeBridgingFinalized)
+			if err := lineaZkevm20.UnpackIntoInterface(bridgeEvent, "BridgingFinalized", log.Data); err != nil {
+				logrus.Errorf("l1ZkMsgSenderObject20.UnpackIntoInterface error. err: %s", err)
+				break
+			}
+			dstContractAddress = bridgeEvent.BridgedToken.Hex()
+			break
+		}
 	}
-
-	var out bridge.LineaTokenBridgeBridgingFinalized
-	parsed.Methods["BridgingFinalized"].Inputs.Copy(&out, res)
 
 	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", oldRecord.ID).
 		Updates(map[string]interface{}{
 			"destination_network_id":       int(event.networkId),
-			"destination_contract_address": out.BridgedToken.Hex(),
+			"destination_contract_address": dstContractAddress,
 			"destination_block_height":     event.blockNumber,
 			"destination_transaction_hash": event.transactionHash,
 			"status":                       database.NftBridgeSuccess}).Error
