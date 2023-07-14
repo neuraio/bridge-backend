@@ -43,8 +43,9 @@ const (
 	zkDepositRefundErc20Topic   = "0xbe066dc591f4a444f75176d387c3e6c775e5706d9ea9a91d11eb49030c66cf60"
 
 	// linea
-	lineaMessageSentErc20Topic  = "0xde5fcf0a1aebed387067eb25655de732ccfc43fe5b5a3d91d367c26e773fcd1c" // event BridgingInitiated (address sender, address recipient, address token, uint256 amount)
-	lineaMessageClaimErc20Topic = "0xa4c827e719e911e8f19393ccdb85b5102f08f0910604d340ba38390b7ff2ab0e" // event MessageClaimed(bytes32 indexed _messageHash)
+	lineaBridgingInitiatedErc20Topic = "0xde5fcf0a1aebed387067eb25655de732ccfc43fe5b5a3d91d367c26e773fcd1c" // event BridgingInitiated (address sender, address recipient, address token, uint256 amount)
+	lineaMessageClaimErc20Topic      = "0xa4c827e719e911e8f19393ccdb85b5102f08f0910604d340ba38390b7ff2ab0e" // event MessageClaimed(bytes32 indexed _messageHash)
+	lineaMessageSentErc20Topic       = "0xe856c2b8bd4eb0027ce32eeaf595c21b0b6b4644b326e5b7bd80a1cf8db72e6c" // MessageSent (index_topic_1 address _from, index_topic_2 address _to, uint256 _fee, uint256 _value, uint256 _nonce, bytes _calldata, index_topic_3 bytes32 _messageHash)
 )
 
 type Erc20ContractAddress struct {
@@ -658,7 +659,7 @@ var bridgeEventZKDepositRefundErc20Handle eventHandlerFunction = func(event *Log
 
 var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
 	// double check
-	if event.Topic != lineaMessageSentErc20Topic {
+	if event.Topic != lineaBridgingInitiatedErc20Topic {
 		return errors.New("invalid topic")
 	}
 
@@ -696,7 +697,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		logrus.Errorf("bridgeEventLineaMessageSentErc20Handle nodeClients[event.networkId] error. networkID:%d", event.networkId)
 		return fmt.Errorf("client not found: %d", event.networkId)
 	}
-	tx, _, err := client.rpcClient.TransactionByHash(context.Background(), common.HexToHash(event.transactionHash))
+	tx, err := client.rpcClient.TransactionReceipt(context.Background(), common.HexToHash(event.transactionHash))
 	if err != nil {
 		if errors.Is(err, ethereum.NotFound) {
 			logrus.Errorf("bridgeEventLineaMessageSentErc20Handle TransactionByHash error. transactionHash:%s", event.transactionHash)
@@ -704,18 +705,15 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		}
 		return err
 	}
-
-	// decode input data
-	parsed, _ := abi.JSON(strings.NewReader(bridge.LineaTokenBridgeABI))
-	// 解码输入数据
-	res, err := parsed.Methods["MessageSent"].Inputs.Unpack(tx.Data()[4:])
-	if err != nil {
-		logrus.Errorf("bridgeEventLineaMessageSentErc20Handle parsed.Methods[\"BridgingInitiated\"] error. transactionHash:%s", event.transactionHash)
-		return err
+	msgHash := ""
+	for _, log := range tx.Logs {
+		for _, topic := range log.Topics {
+			if topic.Hex() == lineaMessageSentErc20Topic {
+				msgHash = log.Topics[3].Hex()
+			}
+		}
 	}
-	var out bridge.LineaZkevmV2MessageSent
-	parsed.Methods["MessageSent"].Inputs.Copy(&out, res)
-	msgHash := hex.EncodeToString(out.MessageHash[:])
+
 	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
@@ -1065,7 +1063,7 @@ func init() {
 	registerHandlerFunction(zkWithdrawErc20Topic, bridgeEventZKWithdrawErc20Handle)
 	registerHandlerFunction(zkSyncWithdrawBlockNumTopic, bridgeEventZKSyncWithdrawBlockNumErc20Handle)
 	registerHandlerFunction(zkSyncFinalizeWithdrawTopic, bridgeEventZKSyncFinalizeWithdrawErc20Handle)
-	registerHandlerFunction(lineaMessageSentErc20Topic, bridgeEventLineaMessageSentErc20Handle)
+	registerHandlerFunction(lineaBridgingInitiatedErc20Topic, bridgeEventLineaMessageSentErc20Handle)
 	registerHandlerFunction(lineaMessageClaimErc20Topic, bridgeEventLineaMessageClaimErc20Handle)
 
 	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(4*time.Minute, jobSendFtToken),

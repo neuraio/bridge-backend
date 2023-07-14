@@ -142,7 +142,7 @@ func getEventLogGraphQueryWithFilters(addresses []string) string {
 		zkWithdrawErc20Topic,
 		zkSyncWithdrawBlockNumTopic,
 		zkSyncFinalizeWithdrawTopic,
-		lineaMessageSentErc20Topic,
+		lineaBridgingInitiatedErc20Topic,
 		lineaMessageClaimErc20Topic,
 	})
 	if err != nil {

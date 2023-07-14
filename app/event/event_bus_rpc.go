@@ -54,7 +54,7 @@ func NewEventFetchThroughRpc(rpcClient *ethclient.Client, addresses []string, bl
 				common.HexToHash(zkWithdrawErc20Topic),
 				common.HexToHash(zkSyncWithdrawBlockNumTopic),
 				common.HexToHash(zkSyncFinalizeWithdrawTopic),
-				common.HexToHash(lineaMessageSentErc20Topic),
+				common.HexToHash(lineaBridgingInitiatedErc20Topic),
 				common.HexToHash(lineaMessageClaimErc20Topic)},
 			},
 		},
