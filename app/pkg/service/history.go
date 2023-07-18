@@ -71,7 +71,7 @@ func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*HistoryRec
 			DepositCount:        record.DepositCount,
 			MsgHash:             record.MsgHash,
 		})
-		if record.Status == database.NftBridgeFinalizeWithdrawal {
+		if record.Status == database.NftBridgeFinalizeWithdrawal || record.Status == database.NftBridgeMessageSentSuccess {
 			ids = append(ids, record.ID)
 		}
 	}
@@ -92,6 +92,7 @@ func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*HistoryRec
 			recordResp.L1BatchNumber = extrasMap[uint(recordResp.ID)].L1BatchNumber
 			recordResp.L1BatchTxIndex = extrasMap[uint(recordResp.ID)].L1BatchTxIndex
 			recordResp.Message = extrasMap[uint(recordResp.ID)].Message
+			recordResp.MsgHash = extrasMap[uint(recordResp.ID)].MessageSent
 		}
 	}
 

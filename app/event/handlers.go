@@ -47,6 +47,7 @@ const (
 	lineaMessageClaimErc20Topic      = "0xa4c827e719e911e8f19393ccdb85b5102f08f0910604d340ba38390b7ff2ab0e" // event MessageClaimed(bytes32 indexed _messageHash)
 	lineaMessageSentErc20Topic       = "0xe856c2b8bd4eb0027ce32eeaf595c21b0b6b4644b326e5b7bd80a1cf8db72e6c" // MessageSent (index_topic_1 address _from, index_topic_2 address _to, uint256 _fee, uint256 _value, uint256 _nonce, bytes _calldata, index_topic_3 bytes32 _messageHash)
 	lineaBridgingFinalizedErc20Topic = "0xd28a2d30314c6a2f46b657c15ee4d7ffc33b2817e78f341a260e216cebfbdbef" // BridgingFinalized (address nativeToken, address bridgedToken, uint256 amount, address recipient)
+	L1L2MessageHashesAddedToInbox    = "0x9995fb3da0c2de4012f2b814b6fc29ce7507571dcb20b8d0bd38621a842df1eb"
 )
 
 type Erc20ContractAddress struct {
@@ -75,7 +76,8 @@ type multiplexer struct {
 }
 
 var defaultMultiplexer = multiplexer{handlers: make(map[string]eventHandler)}
-var abiObject721, abiObject20, abiZkObject20, l1ZkObject20, l1ZkMsgSenderObject20, l2ZkObject20, lineaTokenBridge20, lineaZkevm20 *abi.ABI
+var abiObject721, abiObject20, abiZkObject20, l1ZkObject20, l1ZkMsgSenderObject20, l2ZkObject20, lineaTokenBridge20,
+	lineaZkevm20, l2MessageService20 *abi.ABI
 
 var _ eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
 	// double check
@@ -664,15 +666,6 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		return errors.New("invalid topic")
 	}
 
-	//if len(event.Args) < 3 {
-	//	return errors.New("bridgeEventLineaMessageSentErc20Handle invalid event log lacking of args")
-	//}
-
-	//if len(event.Data) <= 2 {
-	//	return errors.New("invalid event log without data")
-	//}
-
-	// deserialization
 	bridgeEvent := new(bridge.LineaTokenBridgeBridgingInitiated)
 	hexData, err := hex.DecodeString(event.Data[2:])
 	if err != nil {
@@ -698,7 +691,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		logrus.Errorf("bridgeEventLineaMessageSentErc20Handle nodeClients[event.networkId] error. networkID:%d", event.networkId)
 		return fmt.Errorf("client not found: %d", event.networkId)
 	}
-	tx, err := client.rpcClient.TransactionReceipt(context.Background(), common.HexToHash(event.transactionHash))
+	receipt, err := client.rpcClient.TransactionReceipt(context.Background(), common.HexToHash(event.transactionHash))
 	if err != nil {
 		if errors.Is(err, ethereum.NotFound) {
 			logrus.Errorf("bridgeEventLineaMessageSentErc20Handle TransactionByHash error. transactionHash:%s", event.transactionHash)
@@ -707,9 +700,21 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		return err
 	}
 	msgHash := ""
-	for _, log := range tx.Logs {
+	msgSent := map[string]string{}
+	for _, log := range receipt.Logs {
 		if len(log.Topics) > 0 && log.Topics[0].Hex() == lineaMessageSentErc20Topic {
 			msgHash = log.Topics[3].Hex()
+			ms := new(bridge.LineaZkevmV2MessageSent)
+			if err := lineaZkevm20.UnpackIntoInterface(bridgeEvent, "MessageSent", log.Data); err != nil {
+				logrus.Errorf("lineaZkevm20.UnpackIntoInterface MessageSent error. err: %s", err)
+				break
+			}
+			msgSent["from"] = ms.From.Hex()
+			msgSent["to"] = ms.To.Hex()
+			msgSent["fee"] = hexutil.EncodeBig(ms.Fee)
+			msgSent["value"] = hexutil.EncodeBig(ms.Value)
+			msgSent["nonce"] = hexutil.EncodeBig(ms.Nonce)
+			msgSent["calldata"] = hexutil.Encode(ms.Calldata)
 			break
 		}
 	}
@@ -723,16 +728,12 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		SourceTransactionHash: event.transactionHash,
 		SourceAddress:         bridgeEvent.Sender.Hex(),
 
-		//DestinationNetworkId: int(dstNetwork),
-		//DestinationContractAddress: bridgeEvent.Token.Hex(),
-		//DestinationBlockHeight:     0,
-		//DestinationTransactionHash: "",
 		DestinationAddress: bridgeEvent.Recipient.String(),
 
 		Erc20Amount: bridgeEvent.Amount.String(),
 		//Fee:         fee.String(),
 		MsgHash: msgHash,
-		Status:  database.NftBridgeZKing,
+		Status:  database.NftBridgeMessageSent,
 	}
 
 	logrus.Debugf("erc20 bridgeEventHandle :+%v", recorder)
@@ -741,9 +742,19 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
 	}
+	if err := mysqlClient.Save(recorder).Error; err != nil {
+		return err
+	}
 
-	return mysqlClient.Save(recorder).Error
+	msgSentMarshal, err := json.Marshal(msgSent)
+	if err != nil {
+		return err
+	}
+	return mysqlClient.Save(&database.BridgeHistoryExtra{
+		MessageSent: string(msgSentMarshal),
+	}).Error
 }
+
 var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
 	// double check
 	if event.Topic != lineaMessageClaimErc20Topic {
@@ -806,6 +817,46 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 			"destination_block_height":     event.blockNumber,
 			"destination_transaction_hash": event.transactionHash,
 			"status":                       database.NftBridgeSuccess}).Error
+}
+
+var l1L2MessageHashesAddedToInboxErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	// double check
+	if event.Topic != L1L2MessageHashesAddedToInbox {
+		return errors.New("invalid topic")
+	}
+
+	bridgeEvent := new(bridge.L2MessageServiceL1L2MessageHashesAddedToInbox)
+	hexData, err := hex.DecodeString(event.Data[2:])
+	if err != nil {
+		return err
+	}
+
+	if err := l2MessageService20.UnpackIntoInterface(bridgeEvent, "L1L2MessageHashesAddedToInbox", hexData); err != nil {
+		return err
+	}
+
+	msgHash := hexutil.Encode(bridgeEvent.MessageHashes[0][:])
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+	oldRecord := &database.BridgeHistory{}
+	if err := mysqlClient.Where(&database.BridgeHistory{
+		MsgHash: msgHash,
+	}).First(&oldRecord).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil
+		}
+		return err
+	}
+	if oldRecord.ID == 0 {
+		return nil
+	}
+
+	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", oldRecord.ID).
+		Updates(map[string]interface{}{
+			"status": database.NftBridgeMessageSentSuccess}).Error
 }
 
 type ClaimFailedDeposit struct {
@@ -1053,6 +1104,12 @@ func init() {
 	}
 	lineaZkevm20 = lineaZkEvm20
 
+	l2MsgSer, err := bridge.L2MessageServiceMetaData.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+	l2MessageService20 = l2MsgSer
+
 	// register handler
 	// registerHandlerFunction(mintEventTopic, mintEventHandle)
 	registerHandlerFunction(BridgeEventTopic, bridgeEventHandle)
@@ -1065,6 +1122,7 @@ func init() {
 	registerHandlerFunction(zkSyncFinalizeWithdrawTopic, bridgeEventZKSyncFinalizeWithdrawErc20Handle)
 	registerHandlerFunction(lineaBridgingInitiatedErc20Topic, bridgeEventLineaMessageSentErc20Handle)
 	registerHandlerFunction(lineaMessageClaimErc20Topic, bridgeEventLineaMessageClaimErc20Handle)
+	registerHandlerFunction(L1L2MessageHashesAddedToInbox, l1L2MessageHashesAddedToInboxErc20Handle)
 
 	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(4*time.Minute, jobSendFtToken),
 		cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken),

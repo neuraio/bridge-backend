@@ -21,6 +21,8 @@ const (
 	NftBridgeWithdrawing        // zksync withdraw
 	NftBridgeFinalizeWithdrawal // zksync finalizeWithdrawal
 	NftBridgeDepositRefund
+	NftBridgeMessageSent
+	NftBridgeMessageSentSuccess
 )
 
 type Protocol string
@@ -111,4 +113,5 @@ type BridgeHistoryExtra struct {
 	L1BatchNumber  string `json:"l1BatchNumber"`
 	L1BatchTxIndex string `json:"l1BatchTxIndex"`
 	Message        string `json:"message"`
+	MessageSent    string `json:"messageSent"`
 }
