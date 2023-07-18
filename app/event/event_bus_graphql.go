@@ -144,6 +144,7 @@ func getEventLogGraphQueryWithFilters(addresses []string) string {
 		zkSyncFinalizeWithdrawTopic,
 		lineaBridgingInitiatedErc20Topic,
 		lineaMessageClaimErc20Topic,
+		L1L2MessageHashesAddedToInbox,
 	})
 	if err != nil {
 		logrus.Fatalln(err)

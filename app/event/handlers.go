@@ -816,7 +816,7 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 
 	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", oldRecord.ID).
 		Updates(map[string]interface{}{
-			"destination_network_id":       int(event.networkId),
+			//"destination_network_id":       int(event.networkId),
 			"destination_contract_address": dstContractAddress,
 			"destination_block_height":     event.blockNumber,
 			"destination_transaction_hash": event.transactionHash,
