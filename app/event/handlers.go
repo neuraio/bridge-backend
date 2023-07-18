@@ -751,6 +751,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		return err
 	}
 	return mysqlClient.Save(&database.BridgeHistoryExtra{
+		ID:          recorder.ID,
 		MessageSent: string(msgSentMarshal),
 	}).Error
 }
