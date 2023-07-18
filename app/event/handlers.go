@@ -710,8 +710,8 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 				logrus.Errorf("lineaZkevm20.UnpackIntoInterface MessageSent error. err: %s", err)
 				break
 			}
-			msgSent["from"] = log.Topics[1].Hex()
-			msgSent["to"] = log.Topics[2].Hex()
+			msgSent["from"] = common.HexToAddress(log.Topics[1].Hex()).Hex()
+			msgSent["to"] = common.HexToAddress(log.Topics[2].Hex()).Hex()
 			msgSent["fee"] = hexutil.EncodeBig(ms.Fee)
 			msgSent["value"] = hexutil.EncodeBig(ms.Value)
 			msgSent["nonce"] = hexutil.EncodeBig(ms.Nonce)
