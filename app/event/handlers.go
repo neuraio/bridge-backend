@@ -704,8 +704,8 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 	for _, log := range receipt.Logs {
 		if len(log.Topics) > 0 && log.Topics[0].Hex() == lineaMessageSentErc20Topic {
 			msgHash = log.Topics[3].Hex()
-			ms := new(bridge.LineaZkevmV2MessageSent)
-			if err := lineaZkevm20.UnpackIntoInterface(bridgeEvent, "MessageSent", log.Data); err != nil {
+			ms := new(bridge.L2MessageServiceMessageSent)
+			if err := l2MessageService20.UnpackIntoInterface(bridgeEvent, "MessageSent", log.Data); err != nil {
 				logrus.Errorf("lineaZkevm20.UnpackIntoInterface MessageSent error. err: %s", err)
 				break
 			}
