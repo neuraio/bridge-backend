@@ -839,26 +839,27 @@ var l1L2MessageHashesAddedToInboxErc20Handle eventHandlerFunction = func(event *
 		return err
 	}
 
-	msgHash := hexutil.Encode(bridgeEvent.MessageHashes[0][:])
+	msgHashs := []string{}
+	for _, hash := range bridgeEvent.MessageHashes {
+		msgHashs = append(msgHashs, hexutil.Encode(hash[:]))
+	}
 
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
 	}
-	oldRecord := &database.BridgeHistory{}
-	if err := mysqlClient.Where(&database.BridgeHistory{
-		MsgHash: strings.ToLower(msgHash),
-	}).First(&oldRecord).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil
-		}
+	oldRecords := make([]*database.BridgeHistory, 0)
+	if err := mysqlClient.Where("msg_hash in ?", msgHashs).Find(&oldRecords).Error; err != nil {
 		return err
 	}
-	if oldRecord.ID == 0 {
+	if len(oldRecords) == 0 {
 		return nil
 	}
-
-	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", oldRecord.ID).
+	ids := make([]uint, 0)
+	for _, record := range oldRecords {
+		ids = append(ids, record.ID)
+	}
+	return mysqlClient.Model(&database.BridgeHistory{}).Where("id in ?", ids).
 		Updates(map[string]interface{}{
 			"status": database.NftBridgeMessageSentSuccess}).Error
 }
