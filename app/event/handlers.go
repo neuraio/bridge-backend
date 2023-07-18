@@ -735,7 +735,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 
 		Erc20Amount: bridgeEvent.Amount.String(),
 		//Fee:         fee.String(),
-		MsgHash: msgHash,
+		MsgHash: strings.ToLower(msgHash),
 		Status:  database.NftBridgeMessageSent,
 	}
 
@@ -777,7 +777,7 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 	}
 	oldRecord := &database.BridgeHistory{}
 	if err := mysqlClient.Where(&database.BridgeHistory{
-		MsgHash: msgHash,
+		MsgHash: strings.ToLower(msgHash),
 	}).First(&oldRecord).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil
@@ -847,7 +847,7 @@ var l1L2MessageHashesAddedToInboxErc20Handle eventHandlerFunction = func(event *
 	}
 	oldRecord := &database.BridgeHistory{}
 	if err := mysqlClient.Where(&database.BridgeHistory{
-		MsgHash: msgHash,
+		MsgHash: strings.ToLower(msgHash),
 	}).First(&oldRecord).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil
