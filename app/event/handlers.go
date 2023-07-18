@@ -843,7 +843,9 @@ var l1L2MessageHashesAddedToInboxErc20Handle eventHandlerFunction = func(event *
 	for _, hash := range bridgeEvent.MessageHashes {
 		msgHashs = append(msgHashs, hexutil.Encode(hash[:]))
 	}
-
+	if len(msgHashs) == 0 {
+		return nil
+	}
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
