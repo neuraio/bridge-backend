@@ -57,6 +57,7 @@ type Erc20ContractAddress struct {
 	RollupContractAddress string
 	DstNetworkId          networkId
 	LDstNetworkId         networkId // l1 l2 network id
+	MDstNetworkId         networkId
 }
 
 var senderLocker = make(map[networkId]map[common.Address]*sync.Mutex)
@@ -676,8 +677,8 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		return err
 	}
 
-	rollupAddress := getLineaRollUpTokenAddress(event.networkId)
-	if rollupAddress == "" {
+	rollupAddress, dstNetwork := getLineaRollUpTokenAddress(event.networkId)
+	if rollupAddress == "" || dstNetwork == 0 {
 		logrus.Warnf("[Skip] bridgeEventLineaMessageSentErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
 		return nil
 	}
@@ -709,12 +710,13 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 				logrus.Errorf("lineaZkevm20.UnpackIntoInterface MessageSent error. err: %s", err)
 				break
 			}
-			msgSent["from"] = ms.From.Hex()
-			msgSent["to"] = ms.To.Hex()
+			msgSent["from"] = log.Topics[1].Hex()
+			msgSent["to"] = log.Topics[2].Hex()
 			msgSent["fee"] = hexutil.EncodeBig(ms.Fee)
 			msgSent["value"] = hexutil.EncodeBig(ms.Value)
 			msgSent["nonce"] = hexutil.EncodeBig(ms.Nonce)
 			msgSent["calldata"] = hexutil.Encode(ms.Calldata)
+			msgSent["messageHash"] = msgHash
 			break
 		}
 	}
@@ -728,7 +730,8 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		SourceTransactionHash: event.transactionHash,
 		SourceAddress:         bridgeEvent.Sender.Hex(),
 
-		DestinationAddress: bridgeEvent.Recipient.String(),
+		DestinationAddress:   bridgeEvent.Recipient.String(),
+		DestinationNetworkId: int(dstNetwork),
 
 		Erc20Amount: bridgeEvent.Amount.String(),
 		//Fee:         fee.String(),
@@ -956,27 +959,29 @@ func getRollUpTokenAddress(sourceNetwork networkId) (string, networkId) {
 	return rollupTokenAddress, dstNetworkID
 }
 
-func getLineaRollUpTokenAddress(sourceNetwork networkId) string {
+func getLineaRollUpTokenAddress(sourceNetwork networkId) (string, networkId) {
 	erc20ContractPairsLocker.Lock()
 	defer erc20ContractPairsLocker.Unlock()
 
 	if len(erc20ContractPairs) == 0 {
 		logrus.Error("getLineaRollUpTokenAddress erc20ContractPairs ==0 ")
-		return ""
+		return "", 0
 	}
 	//logrus.Debugf("getRollUpContractAddress sourceNetwork :%d,  erc20ContractPairs:%+v", sourceNetwork, erc20ContractPairs)
 	rollupTokenAddress := ""
+	var dstNetworkID networkId = 0
 	for _, erc20ContractPair := range erc20ContractPairs {
 		for j := range erc20ContractPair {
-			if erc20ContractPair[j].NetworkId == sourceNetwork {
+			if erc20ContractPair[j].NetworkId == sourceNetwork && erc20ContractPair[j].MDstNetworkId > 0 {
 				rollupTokenAddress = erc20ContractPair[j].ContractAddress
+				dstNetworkID = erc20ContractPair[j].MDstNetworkId
 			}
 		}
 	}
-	if rollupTokenAddress == "" {
-		return ""
+	if rollupTokenAddress == "" || dstNetworkID == 0 {
+		return "", 0
 	}
-	return rollupTokenAddress
+	return rollupTokenAddress, dstNetworkID
 }
 
 var cronJobs = make([]cronJobFunction, 0)
@@ -1015,6 +1020,7 @@ func registerErc20ContractPairs(chainIds []networkId) {
 			RollupContractAddress: erc20ContractPairsConfiguration[i].RollupContractAddress,
 			DstNetworkId:          networkId(erc20ContractPairsConfiguration[i].DstNetworkId),
 			LDstNetworkId:         networkId(erc20ContractPairsConfiguration[i].LDstNetworkId),
+			MDstNetworkId:         networkId(erc20ContractPairsConfiguration[i].MDstNetworkId),
 		})
 	}
 
@@ -1034,6 +1040,7 @@ func registerErc20ContractPairs(chainIds []networkId) {
 				RollupContractAddress: pair.RollupContractAddress,
 				DstNetworkId:          pair.DstNetworkId,
 				LDstNetworkId:         pair.LDstNetworkId,
+				MDstNetworkId:         pair.MDstNetworkId,
 			})
 		}
 	}

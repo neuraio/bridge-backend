@@ -100,6 +100,7 @@ type Erc20BridgeContractAddress struct {
 	RollupContractAddress string // zkevm polygon eth
 	DstNetworkId          uint64 // zkevm polygon eth network id
 	LDstNetworkId         uint64 // l1 l2 network id
+	MDstNetworkId         uint64 // goerli <=> linea network id
 }
 
 type BridgeHistoryExtra struct {
