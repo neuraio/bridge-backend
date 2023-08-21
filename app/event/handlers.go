@@ -556,7 +556,8 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	// 解码输入数据
 	res, err := parsed.Methods["finalizeWithdrawal"].Inputs.Unpack(tx.Data()[4:])
 	if err != nil {
-		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s", event.transactionHash)
+		logrus.Errorf("tx.Data():%+v", tx.Data())
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
 		return err
 	}
 	var out FinalizeWithdrawalInput
