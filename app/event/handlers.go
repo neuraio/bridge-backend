@@ -668,7 +668,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 	if event.Topic != lineaBridgingInitiatedErc20Topic {
 		return errors.New("invalid topic")
 	}
-
+	logrus.Warningf("bridgeEventLineaMessageSentErc20Handle")
 	bridgeEvent := new(bridge.TokenBridgeBridgingInitiated)
 	hexData, err := hex.DecodeString(event.Data[2:])
 	if err != nil {
