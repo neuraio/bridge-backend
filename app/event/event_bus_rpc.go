@@ -131,9 +131,6 @@ func (ef *eventFetchThroughRpc) subscribeEvents(event chan *LogEvent, nextSignal
 			}
 			logrus.Debugf("ef.logFilter: begin:%d, end:%d, topics:%+v, address:%+v, logLen:%d", ef.logFilter.FromBlock.Uint64(), ef.logFilter.ToBlock.Uint64(), ef.logFilter.Topics, ef.logFilter.Addresses, len(logs))
 			for _, log := range logs {
-				if log.TxHash.Hex() == "0xa604ef314a1287efe8bcfc83ccb160cfdce140237cd91e79a9ca80ebe48db8d3" {
-					logrus.Warning("loginfo")
-				}
 				logEvent := &LogEvent{
 					blockNumber:     log.BlockNumber,
 					transactionHash: log.TxHash.Hex(),

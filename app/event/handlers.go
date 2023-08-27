@@ -668,7 +668,11 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 	if event.Topic != lineaBridgingInitiatedErc20Topic {
 		return errors.New("invalid topic")
 	}
-	logrus.Warningf("bridgeEventLineaMessageSentErc20Handle")
+
+	if len(event.Args) < 3 {
+		return errors.New("bridgeEventLineaMessageSentErc20Handle invalid event log lacking of args")
+	}
+
 	bridgeEvent := new(bridge.TokenBridgeBridgingInitiated)
 	hexData, err := hex.DecodeString(event.Data[2:])
 	if err != nil {
@@ -684,8 +688,8 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		logrus.Warnf("[Skip] bridgeEventLineaMessageSentErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
 		return nil
 	}
-
-	if strings.ToLower(bridgeEvent.Token.String()) != strings.ToLower(rollupAddress) {
+	token := event.Args[1]
+	if strings.ToLower(token) != strings.ToLower(rollupAddress) {
 		return nil
 	}
 
@@ -730,15 +734,15 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		ProtocolType: database.Erc20,
 
 		SourceNetworkId:       int(event.networkId),
-		SourceContractAddress: bridgeEvent.Token.String(),
+		SourceContractAddress: token,
 		SourceBlockHeight:     event.blockNumber,
 		SourceTransactionHash: event.transactionHash,
-		SourceAddress:         bridgeEvent.Sender.Hex(),
+		SourceAddress:         event.Args[0],
 
 		DestinationAddress:   bridgeEvent.Recipient.String(),
 		DestinationNetworkId: int(dstNetwork),
 
-		Erc20Amount: bridgeEvent.Amount.String(),
+		Erc20Amount: event.Args[2],
 		//Fee:         fee.String(),
 		MsgHash: strings.ToLower(msgHash),
 		Status:  status,
@@ -809,12 +813,7 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 	dstContractAddress := ""
 	for _, log := range receipt.Logs {
 		if len(log.Topics) > 0 && log.Topics[0].Hex() == lineaBridgingFinalizedErc20Topic {
-			bridgeEvent := new(bridge.TokenBridgeBridgingFinalized)
-			if err := lineaTokenBridge20.UnpackIntoInterface(bridgeEvent, "BridgingFinalized", log.Data); err != nil {
-				logrus.Errorf("lineaZkevm20.UnpackIntoInterface error. err: %s", err)
-				break
-			}
-			dstContractAddress = bridgeEvent.BridgedToken.Hex()
+			dstContractAddress = common.HexToAddress(log.Topics[1].Hex()).Hex()
 			break
 		}
 	}
