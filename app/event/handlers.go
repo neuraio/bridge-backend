@@ -47,7 +47,8 @@ const (
 	lineaMessageClaimErc20Topic      = "0xa4c827e719e911e8f19393ccdb85b5102f08f0910604d340ba38390b7ff2ab0e" // event MessageClaimed(bytes32 indexed _messageHash)
 	lineaMessageSentErc20Topic       = "0xe856c2b8bd4eb0027ce32eeaf595c21b0b6b4644b326e5b7bd80a1cf8db72e6c" // MessageSent (index_topic_1 address _from, index_topic_2 address _to, uint256 _fee, uint256 _value, uint256 _nonce, bytes _calldata, index_topic_3 bytes32 _messageHash)
 	lineaBridgingFinalizedErc20Topic = "0xd28a2d30314c6a2f46b657c15ee4d7ffc33b2817e78f341a260e216cebfbdbef" // BridgingFinalized (address nativeToken, address bridgedToken, uint256 amount, address recipient)
-	L1L2MessageHashesAddedToInbox    = "0x9995fb3da0c2de4012f2b814b6fc29ce7507571dcb20b8d0bd38621a842df1eb"
+	L1L2MessageHashesAddedToInbox    = "0x9995fb3da0c2de4012f2b814b6fc29ce7507571dcb20b8d0bd38621a842df1eb" //event L1L2MessageHashesAddedToInbox(bytes32[] messageHashes)
+	blockFinalized                   = "0xf2c535759092d16e9334a11dd9b52eca543f1d9cca5ba9d16c472aef009de432" // event BlockFinalized(uint256 indexed blockNumber, bytes32 indexed stateRootHash)
 )
 
 type Erc20ContractAddress struct {
@@ -58,6 +59,7 @@ type Erc20ContractAddress struct {
 	DstNetworkId          networkId
 	LDstNetworkId         networkId // l1 l2 network id
 	MDstNetworkId         networkId
+	IsBlockFinalized      bool
 }
 
 var senderLocker = make(map[networkId]map[common.Address]*sync.Mutex)
@@ -667,7 +669,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		return errors.New("invalid topic")
 	}
 
-	bridgeEvent := new(bridge.LineaTokenBridgeBridgingInitiated)
+	bridgeEvent := new(bridge.TokenBridgeBridgingInitiated)
 	hexData, err := hex.DecodeString(event.Data[2:])
 	if err != nil {
 		return err
@@ -677,7 +679,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		return err
 	}
 
-	rollupAddress, dstNetwork := getLineaRollUpTokenAddress(event.networkId)
+	rollupAddress, dstNetwork, isBlockFinalized := getLineaRollUpTokenAddress(event.networkId)
 	if rollupAddress == "" || dstNetwork == 0 {
 		logrus.Warnf("[Skip] bridgeEventLineaMessageSentErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
 		return nil
@@ -720,7 +722,10 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 			break
 		}
 	}
-
+	status := database.NftBridgeMessageSent
+	if isBlockFinalized {
+		status = database.NftBridgeMessageSent2
+	}
 	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
@@ -736,7 +741,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		Erc20Amount: bridgeEvent.Amount.String(),
 		//Fee:         fee.String(),
 		MsgHash: strings.ToLower(msgHash),
-		Status:  database.NftBridgeMessageSent,
+		Status:  status,
 	}
 
 	logrus.Debugf("erc20 bridgeEventHandle :+%v", recorder)
@@ -804,7 +809,7 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 	dstContractAddress := ""
 	for _, log := range receipt.Logs {
 		if len(log.Topics) > 0 && log.Topics[0].Hex() == lineaBridgingFinalizedErc20Topic {
-			bridgeEvent := new(bridge.LineaTokenBridgeBridgingFinalized)
+			bridgeEvent := new(bridge.TokenBridgeBridgingFinalized)
 			if err := lineaTokenBridge20.UnpackIntoInterface(bridgeEvent, "BridgingFinalized", log.Data); err != nil {
 				logrus.Errorf("lineaZkevm20.UnpackIntoInterface error. err: %s", err)
 				break
@@ -819,8 +824,8 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 			//"destination_network_id":       int(event.networkId),
 			"destination_contract_address": dstContractAddress,
 			"destination_block_height":     event.blockNumber,
-			"destination_transaction_hash": event.transactionHash,
-			"status":                       database.NftBridgeSuccess}).Error
+			//"destination_transaction_hash": event.transactionHash,
+			"status": database.NftBridgeSuccess}).Error
 }
 
 var l1L2MessageHashesAddedToInboxErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
@@ -864,6 +869,35 @@ var l1L2MessageHashesAddedToInboxErc20Handle eventHandlerFunction = func(event *
 	return mysqlClient.Model(&database.BridgeHistory{}).Where("id in ?", ids).
 		Updates(map[string]interface{}{
 			"status": database.NftBridgeMessageSentSuccess}).Error
+}
+
+var blockFinalizedErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+	// double check
+	if event.Topic != blockFinalized {
+		return errors.New("invalid topic")
+	}
+
+	if len(event.Args) < 2 {
+		return errors.New("invalid event log lacking of args")
+	}
+
+	height := big.NewInt(0).SetBytes(common.FromHex(event.Args[0]))
+
+	recorder := &database.SyncZkProgressRecord{
+		CreatedAt:   time.Now(),
+		BlockHeight: height.Uint64(),
+		NetworkId:   int(event.networkId),
+		Type:        database.SyncBlockFinalizedHeight,
+	}
+
+	logrus.Debugf("blockFinalizedErc20Handle %v", recorder)
+
+	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+	if !ok {
+		logrus.Fatalln("Weird! convert raw transaction client error")
+	}
+
+	return mysqlClient.Save(recorder).Error
 }
 
 type ClaimFailedDeposit struct {
@@ -962,29 +996,31 @@ func getRollUpTokenAddress(sourceNetwork networkId) (string, networkId) {
 	return rollupTokenAddress, dstNetworkID
 }
 
-func getLineaRollUpTokenAddress(sourceNetwork networkId) (string, networkId) {
+func getLineaRollUpTokenAddress(sourceNetwork networkId) (string, networkId, bool) {
 	erc20ContractPairsLocker.Lock()
 	defer erc20ContractPairsLocker.Unlock()
 
 	if len(erc20ContractPairs) == 0 {
 		logrus.Error("getLineaRollUpTokenAddress erc20ContractPairs ==0 ")
-		return "", 0
+		return "", 0, false
 	}
 	//logrus.Debugf("getRollUpContractAddress sourceNetwork :%d,  erc20ContractPairs:%+v", sourceNetwork, erc20ContractPairs)
 	rollupTokenAddress := ""
+	var isBlockFinalized bool
 	var dstNetworkID networkId = 0
 	for _, erc20ContractPair := range erc20ContractPairs {
 		for j := range erc20ContractPair {
 			if erc20ContractPair[j].NetworkId == sourceNetwork && erc20ContractPair[j].MDstNetworkId > 0 {
 				rollupTokenAddress = erc20ContractPair[j].ContractAddress
 				dstNetworkID = erc20ContractPair[j].MDstNetworkId
+				isBlockFinalized = erc20ContractPair[j].IsBlockFinalized
 			}
 		}
 	}
 	if rollupTokenAddress == "" || dstNetworkID == 0 {
-		return "", 0
+		return "", 0, false
 	}
-	return rollupTokenAddress, dstNetworkID
+	return rollupTokenAddress, dstNetworkID, isBlockFinalized
 }
 
 var cronJobs = make([]cronJobFunction, 0)
@@ -1024,6 +1060,7 @@ func registerErc20ContractPairs(chainIds []networkId) {
 			DstNetworkId:          networkId(erc20ContractPairsConfiguration[i].DstNetworkId),
 			LDstNetworkId:         networkId(erc20ContractPairsConfiguration[i].LDstNetworkId),
 			MDstNetworkId:         networkId(erc20ContractPairsConfiguration[i].MDstNetworkId),
+			IsBlockFinalized:      erc20ContractPairsConfiguration[i].IsBlockFinalized,
 		})
 	}
 
@@ -1103,13 +1140,13 @@ func init() {
 	}
 	l1ZkMsgSenderObject20 = l1MsgErc20B
 
-	lineaTB20, err := bridge.LineaTokenBridgeMetaData.GetAbi()
+	lineaTB20, err := bridge.TokenBridgeMetaData.GetAbi()
 	if err != nil {
 		panic(err)
 	}
 	lineaTokenBridge20 = lineaTB20
 
-	lineaZkEvm20, err := bridge.LineaZkevmV2MetaData.GetAbi()
+	lineaZkEvm20, err := bridge.ZkEvmV2MetaData.GetAbi()
 	if err != nil {
 		panic(err)
 	}
@@ -1134,11 +1171,13 @@ func init() {
 	registerHandlerFunction(lineaBridgingInitiatedErc20Topic, bridgeEventLineaMessageSentErc20Handle)
 	registerHandlerFunction(lineaMessageClaimErc20Topic, bridgeEventLineaMessageClaimErc20Handle)
 	registerHandlerFunction(L1L2MessageHashesAddedToInbox, l1L2MessageHashesAddedToInboxErc20Handle)
+	registerHandlerFunction(blockFinalized, blockFinalizedErc20Handle)
 
 	registerJobs(cronJobWrapper(time.Second, jobSendNftToken), cronJobWrapper(10*time.Second, jobSendFtToken),
 		cronJobWrapper(5*time.Second, jobSendTransactionResult), cronJobWrapper(5*time.Second, jobRefundToken),
 		cronJobWrapper(10*time.Second, jobRefundTransactionResult), cronJobWrapper(10*time.Second, jobZkDepositToken),
 		cronJobWrapper(10*time.Second, jobZkWithdrawToken),
+		cronJobWrapper(10*time.Second, jobHandleBlockFinalized),
 	)
 }
 
@@ -1213,6 +1252,35 @@ func jobZkDepositToken(_ context.Context) error {
 			logrus.Error(err)
 		}
 	}
+	return nil
+}
+
+// 监控goerli 链上 的 BlockFinalized  事件, 如果 该事件内的block number 大于等于 linea 链上的 这笔 bridge 的block, 则表示可以在 goerli 上进行 claim message 操作
+
+func jobHandleBlockFinalized(_ context.Context) error {
+	bridgeHistories := make([]database.BridgeHistory, 0)
+	if err := database.GetMysqlClient().Where("status = ?", database.NftBridgeMessageSent2).Limit(recordsForOnceJob).Find(&bridgeHistories).Error; err != nil {
+		return err
+	}
+	if len(bridgeHistories) == 0 {
+		return nil
+	}
+
+	for _, bridgeHistory := range bridgeHistories {
+		height := &database.SyncZkProgressRecord{}
+		if err := database.GetMysqlClient().Model(&database.SyncZkProgressRecord{}).
+			Where("network_id = ? and type = ?", bridgeHistory.DestinationNetworkId, database.SyncBlockFinalizedHeight).
+			First(&height).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return err
+			}
+		}
+		bridgeHistory.Status = database.NftBridgeMessageSentSuccess
+		if err := database.GetMysqlClient().Save(&bridgeHistory).Error; err != nil {
+			logrus.Error(err)
+		}
+	}
+
 	return nil
 }
 

@@ -57,6 +57,7 @@ func NewEventFetchThroughRpc(rpcClient *ethclient.Client, addresses []string, bl
 				common.HexToHash(lineaBridgingInitiatedErc20Topic),
 				common.HexToHash(lineaMessageClaimErc20Topic),
 				common.HexToHash(L1L2MessageHashesAddedToInbox),
+				common.HexToHash(blockFinalized),
 			},
 			},
 		},
