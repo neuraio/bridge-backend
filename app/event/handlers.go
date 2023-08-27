@@ -733,6 +733,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 	if isBlockFinalized {
 		status = database.NftBridgeMessageSent2
 	}
+
 	recorder := &database.BridgeHistory{
 		ProtocolType: database.Erc20,
 
@@ -745,7 +746,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		DestinationAddress:   bridgeEvent.Recipient.String(),
 		DestinationNetworkId: int(dstNetwork),
 
-		Erc20Amount: event.Args[2],
+		Erc20Amount: big.NewInt(0).SetBytes(common.FromHex(event.Args[2])).String(),
 		//Fee:         fee.String(),
 		MsgHash: strings.ToLower(msgHash),
 		Status:  status,
@@ -816,11 +817,10 @@ var bridgeEventLineaMessageClaimErc20Handle eventHandlerFunction = func(event *L
 	dstContractAddress := ""
 	for _, log := range receipt.Logs {
 		if len(log.Topics) > 0 && log.Topics[0].Hex() == lineaBridgingFinalizedErc20Topic {
-			dstContractAddress = common.HexToAddress(log.Topics[1].Hex()).Hex()
+			dstContractAddress = common.HexToAddress(log.Topics[2].Hex()).Hex()
 			break
 		}
 	}
-
 	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", oldRecord.ID).
 		Updates(map[string]interface{}{
 			//"destination_network_id":       int(event.networkId),
