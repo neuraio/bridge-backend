@@ -1084,6 +1084,7 @@ func registerErc20ContractPairs(chainIds []networkId) {
 				DstNetworkId:          pair.DstNetworkId,
 				LDstNetworkId:         pair.LDstNetworkId,
 				MDstNetworkId:         pair.MDstNetworkId,
+				IsBlockFinalized:      pair.IsBlockFinalized,
 			})
 		}
 	}
