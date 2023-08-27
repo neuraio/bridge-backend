@@ -688,7 +688,8 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		logrus.Warnf("[Skip] bridgeEventLineaMessageSentErc20Handle Erc20 Bridge Event Fetched Without Any Contract Pair. Transaction Hash: %s", event.transactionHash)
 		return nil
 	}
-	token := event.Args[1]
+
+	token := common.HexToAddress(event.Args[1]).Hex()
 	logrus.Warningf("bridgeEventLineaMessageSentErc20Handle token:%s", token)
 	logrus.Warningf("bridgeEventLineaMessageSentErc20Handle rollupAddress:%s", rollupAddress)
 	if strings.ToLower(token) != strings.ToLower(rollupAddress) {
@@ -739,7 +740,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		SourceContractAddress: token,
 		SourceBlockHeight:     event.blockNumber,
 		SourceTransactionHash: event.transactionHash,
-		SourceAddress:         event.Args[0],
+		SourceAddress:         common.HexToAddress(event.Args[0]).String(),
 
 		DestinationAddress:   bridgeEvent.Recipient.String(),
 		DestinationNetworkId: int(dstNetwork),
