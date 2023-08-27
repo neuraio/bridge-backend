@@ -692,6 +692,7 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 	token := common.HexToAddress(event.Args[1]).Hex()
 	logrus.Warningf("bridgeEventLineaMessageSentErc20Handle token:%s", token)
 	logrus.Warningf("bridgeEventLineaMessageSentErc20Handle rollupAddress:%s", rollupAddress)
+	logrus.Warningf("bridgeEventLineaMessageSentErc20Handle isBlockFinalized:%+v", isBlockFinalized)
 	if strings.ToLower(token) != strings.ToLower(rollupAddress) {
 		return nil
 	}
