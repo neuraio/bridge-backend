@@ -1279,7 +1279,9 @@ func jobHandleBlockFinalized(_ context.Context) error {
 				return err
 			}
 		}
-		bridgeHistory.Status = database.NftBridgeMessageSentSuccess
+		if height.BlockHeight > bridgeHistory.SourceBlockHeight {
+			bridgeHistory.Status = database.NftBridgeMessageSentSuccess
+		}
 		if err := database.GetMysqlClient().Save(&bridgeHistory).Error; err != nil {
 			logrus.Error(err)
 		}
