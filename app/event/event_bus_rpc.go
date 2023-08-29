@@ -53,7 +53,13 @@ func NewEventFetchThroughRpc(rpcClient *ethclient.Client, addresses []string, bl
 				common.HexToHash(zkDepositErc20Topic),
 				common.HexToHash(zkWithdrawErc20Topic),
 				common.HexToHash(zkSyncWithdrawBlockNumTopic),
-				common.HexToHash(zkSyncFinalizeWithdrawTopic)}},
+				common.HexToHash(zkSyncFinalizeWithdrawTopic),
+				common.HexToHash(lineaBridgingInitiatedErc20Topic),
+				common.HexToHash(lineaMessageClaimErc20Topic),
+				common.HexToHash(L1L2MessageHashesAddedToInbox),
+				common.HexToHash(blockFinalized),
+			},
+			},
 		},
 		blockStep:                   blockStep,
 		heightDelay:                 blockDelay,
@@ -128,7 +134,6 @@ func (ef *eventFetchThroughRpc) subscribeEvents(event chan *LogEvent, nextSignal
 			}
 			logrus.Debugf("ef.logFilter: begin:%d, end:%d, topics:%+v, address:%+v, logLen:%d", ef.logFilter.FromBlock.Uint64(), ef.logFilter.ToBlock.Uint64(), ef.logFilter.Topics, ef.logFilter.Addresses, len(logs))
 			for _, log := range logs {
-
 				logEvent := &LogEvent{
 					blockNumber:     log.BlockNumber,
 					transactionHash: log.TxHash.Hex(),

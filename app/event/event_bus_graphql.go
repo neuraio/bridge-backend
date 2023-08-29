@@ -136,12 +136,20 @@ func getEventLogGraphQueryWithFilters(addresses []string) string {
 		logrus.Fatalln(err)
 	}
 
-	topic, err := json.Marshal([]string{BridgeBurnErc20Topic, BridgeEventTopic, ZkBridgeErc20Topic,
+	topic, err := json.Marshal([]string{
+		BridgeBurnErc20Topic,
+		BridgeEventTopic,
+		ZkBridgeErc20Topic,
 		ZkClaimErc20Topic,
 		zkDepositErc20Topic,
 		zkWithdrawErc20Topic,
 		zkSyncWithdrawBlockNumTopic,
-		zkSyncFinalizeWithdrawTopic})
+		zkSyncFinalizeWithdrawTopic,
+		lineaBridgingInitiatedErc20Topic,
+		lineaMessageClaimErc20Topic,
+		L1L2MessageHashesAddedToInbox,
+		blockFinalized,
+	})
 	if err != nil {
 		logrus.Fatalln(err)
 	}

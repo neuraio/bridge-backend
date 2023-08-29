@@ -30,6 +30,7 @@ type HistoryRecordResp struct {
 	L1BatchNumber  string `json:"l1BatchNumber"`
 	L1BatchTxIndex string `json:"l1BatchTxIndex"`
 	Message        string `json:"message"`
+	MsgHash        string `json:"msgHash"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -68,8 +69,9 @@ func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*HistoryRec
 			UpdatedAt:           record.UpdatedAt,
 			Erc20Amount:         record.Erc20Amount,
 			DepositCount:        record.DepositCount,
+			MsgHash:             record.MsgHash,
 		})
-		if record.Status == database.NftBridgeFinalizeWithdrawal {
+		if record.Status == database.NftBridgeFinalizeWithdrawal || record.Status == database.NftBridgeMessageSentSuccess {
 			ids = append(ids, record.ID)
 		}
 	}
@@ -90,6 +92,7 @@ func ListHistoryRecords(f *request.ListHistoryRecordsFilter) (data []*HistoryRec
 			recordResp.L1BatchNumber = extrasMap[uint(recordResp.ID)].L1BatchNumber
 			recordResp.L1BatchTxIndex = extrasMap[uint(recordResp.ID)].L1BatchTxIndex
 			recordResp.Message = extrasMap[uint(recordResp.ID)].Message
+			recordResp.MsgHash = extrasMap[uint(recordResp.ID)].MessageSent
 		}
 	}
 

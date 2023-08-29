@@ -21,6 +21,9 @@ const (
 	NftBridgeWithdrawing        // zksync withdraw
 	NftBridgeFinalizeWithdrawal // zksync finalizeWithdrawal
 	NftBridgeDepositRefund
+	NftBridgeMessageSent        /// linea <= geroli
+	NftBridgeMessageSentSuccess // linea <=> geroli
+	NftBridgeMessageSent2       /// linea => geroli
 )
 
 type Protocol string
@@ -54,6 +57,7 @@ type BridgeHistory struct {
 	Fee                        string   `json:"fee"`
 
 	DepositCount uint64 // ZK Bridge attribute
+	MsgHash      string `json:"msgHash"` // linea attribute
 }
 
 type Erc721BridgeContractAddress struct {
@@ -67,6 +71,7 @@ type Erc721BridgeContractAddress struct {
 
 const SynchronizedLatestHeight = "synchronized_latest_height"
 const SyncZkFinalizeWithdrawalHeight = "sync_zk_event_height"
+const SyncBlockFinalizedHeight = "sync_block_finalized_height"
 
 type SynchronizationProgressRecord struct {
 	gorm.Model
@@ -97,6 +102,8 @@ type Erc20BridgeContractAddress struct {
 	RollupContractAddress string // zkevm polygon eth
 	DstNetworkId          uint64 // zkevm polygon eth network id
 	LDstNetworkId         uint64 // l1 l2 network id
+	MDstNetworkId         uint64 // goerli <=> linea network id
+	IsBlockFinalized      bool   // need to BlockFinalized (监控 blockNumber 是否到达 (linea -> goerli) 发起交易时的块
 }
 
 type BridgeHistoryExtra struct {
@@ -110,4 +117,5 @@ type BridgeHistoryExtra struct {
 	L1BatchNumber  string `json:"l1BatchNumber"`
 	L1BatchTxIndex string `json:"l1BatchTxIndex"`
 	Message        string `json:"message"`
+	MessageSent    string `json:"messageSent"`
 }
