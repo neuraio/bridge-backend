@@ -56,7 +56,7 @@ steps:
     settings:
       build_tag: ${DRONE_COMMIT_SHA:0:7}
       host:
-        - 172.31.0.222/
+        - 172.31.0.222
       username: root
       key:
         from_secret: k8s-master1-idrsa
