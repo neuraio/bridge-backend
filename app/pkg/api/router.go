@@ -207,6 +207,10 @@ func health(c *gin.Context) {
 		failCheck = append(failCheck, err.Error())
 	}
 
+	if err := checkBridgeStatusFix(); err != nil {
+		failCheck = append(failCheck, err.Error())
+	}
+
 	if len(failCheck) > 0 {
 		c.AbortWithStatusJSON(http.StatusExpectationFailed, failCheck)
 		return
@@ -235,6 +239,17 @@ func checkBridgeStatus() error {
 	}
 	if count > 50 {
 		return fmt.Errorf("%d transactions undo", count)
+	}
+	return nil
+}
+
+func checkBridgeStatusFix() error {
+	var count int64
+	if err := database.GetMysqlClient().Model(new(database.BridgeHistory)).Where("status in  ?", []int{-1, -2, -3, -4, -5, -6}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return fmt.Errorf("%d transactions need to check", count)
 	}
 	return nil
 }
