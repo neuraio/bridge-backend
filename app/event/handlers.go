@@ -592,6 +592,7 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	}
 	var outs = []bridge.WithdrawalFinalizerRequestFinalizeWithdrawal{}
 	withdrawParsed.Methods["finalizeWithdrawals"].Inputs.Copy(&outs, withdraws)
+	logrus.Warningf("111bridgeEventZKSyncFinalizeWithdrawErc20Handle len:%d", len(outs))
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
