@@ -597,6 +597,7 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
 	}
+	logrus.Warningf("outslen:%+v, outs:%+v", len(outs), outs)
 	for _, out := range outs {
 		l2BlockNumber := hexutil.EncodeBig(out.L2BlockNumber)
 		l2MessageIndex := out.L2MessageIndex.Uint64()
