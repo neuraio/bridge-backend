@@ -557,31 +557,67 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	parsed, _ := abi.JSON(strings.NewReader(bridge.L1ERC20BridgeABI))
 	// 解码输入数据
 	res, err := parsed.Methods["finalizeWithdrawal"].Inputs.Unpack(tx.Data()[4:])
+	if err == nil {
+		//l2BlockNumber == l1_batch_number
+		//l2MessageIndex == proof_id
+		//l2TxNumberInBlock == l1_batch_tx_index
+		var out FinalizeWithdrawalInput
+		parsed.Methods["finalizeWithdrawal"].Inputs.Copy(&out, res)
+
+		l2BlockNumber := hexutil.EncodeBig(out.L2BlockNumber)
+		l2MessageIndex := out.L2MessageIndex.Uint64()
+		l2TxNumberInBlock := hexutil.EncodeBig(big.NewInt(int64(out.L2TxNumberInBlock)))
+
+		extra := &database.BridgeHistoryExtra{}
+		if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
+			Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", l2BlockNumber, l2MessageIndex, l2TxNumberInBlock).First(&extra).Error; err != nil {
+			logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle BridgeHistoryExtra error. transactionHash:%s", event.transactionHash)
+			return err
+		}
+
+		mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
+		if !ok {
+			logrus.Fatalln("Weird! convert raw transaction client error")
+		}
+
+		return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", extra.ID).Updates(map[string]interface{}{"destination_block_height": event.blockNumber, "status": database.NftBridgeSuccess}).Error
+
+	}
+	logrus.Warningf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
+	withdrawParsed, _ := abi.JSON(strings.NewReader(bridge.WithdrawalFinalizerABI))
+	withdraws, err := parsed.Methods["finalizeWithdrawals"].Inputs.Unpack(tx.Data()[4:])
 	if err != nil {
-		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
+		logrus.Warningf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawals\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
 		return err
 	}
-	var out FinalizeWithdrawalInput
-	parsed.Methods["finalizeWithdrawal"].Inputs.Copy(&out, res)
-
-	//l2BlockNumber == l1_batch_number
-	//l2MessageIndex == proof_id
-	//l2TxNumberInBlock == l1_batch_tx_index
-
-	extra := &database.BridgeHistoryExtra{}
-	if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
-		Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", hexutil.EncodeBig(out.L2BlockNumber),
-			out.L2MessageIndex.Uint64(), hexutil.EncodeBig(big.NewInt(int64(out.L2TxNumberInBlock)))).First(&extra).Error; err != nil {
-		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle BridgeHistoryExtra error. transactionHash:%s", event.transactionHash)
-		return err
-	}
-
+	var outs []bridge.WithdrawalFinalizerRequestFinalizeWithdrawal
+	withdrawParsed.Methods["finalizeWithdrawals"].Inputs.Copy(&outs, withdraws)
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
 	}
+	for _, out := range outs {
+		l2BlockNumber := hexutil.EncodeBig(out.L2BlockNumber)
+		l2MessageIndex := out.L2MessageIndex.Uint64()
+		l2TxNumberInBlock := hexutil.EncodeBig(big.NewInt(int64(out.L2TxNumberInBlock)))
 
-	return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", extra.ID).Updates(map[string]interface{}{"destination_block_height": event.blockNumber, "status": database.NftBridgeSuccess}).Error
+		extra := &database.BridgeHistoryExtra{}
+		if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
+			Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", l2BlockNumber, l2MessageIndex, l2TxNumberInBlock).First(&extra).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle get BridgeHistoryExtra error. transactionHash:%s", event.transactionHash)
+				return err
+			}
+		}
+		if extra.ID == 0 {
+			continue
+		}
+		if err := mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", extra.ID).
+			Updates(map[string]interface{}{"destination_block_height": event.blockNumber, "status": database.NftBridgeSuccess}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 var bridgeEventZKDepositRefundErc20Handle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
