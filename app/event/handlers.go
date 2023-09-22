@@ -583,11 +583,11 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 		return mysqlClient.Model(&database.BridgeHistory{}).Where("id = ?", extra.ID).Updates(map[string]interface{}{"destination_block_height": event.blockNumber, "status": database.NftBridgeSuccess}).Error
 
 	}
-	logrus.Warningf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
+	logrus.Warningf("111bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
 	withdrawParsed, _ := abi.JSON(strings.NewReader(bridge.WithdrawalFinalizerABI))
 	withdraws, err := parsed.Methods["finalizeWithdrawals"].Inputs.Unpack(tx.Data()[4:])
 	if err != nil {
-		logrus.Warningf("bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawals\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
+		logrus.Warningf("112bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawals\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
 		return err
 	}
 	var outs []bridge.WithdrawalFinalizerRequestFinalizeWithdrawal
@@ -600,7 +600,7 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 		l2BlockNumber := hexutil.EncodeBig(out.L2BlockNumber)
 		l2MessageIndex := out.L2MessageIndex.Uint64()
 		l2TxNumberInBlock := hexutil.EncodeBig(big.NewInt(int64(out.L2TxNumberInBlock)))
-
+		logrus.Warningf("111bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. l2BlockNumber :%s, l2MessageIndex:%d, l2TxNumberInBlock：%s ", l2BlockNumber, l2MessageIndex, l2TxNumberInBlock)
 		extra := &database.BridgeHistoryExtra{}
 		if err := database.GetMysqlClient().Model(database.BridgeHistoryExtra{}).
 			Where("l1_batch_number = ? and proof_id = ? and l1_batch_tx_index = ?", l2BlockNumber, l2MessageIndex, l2TxNumberInBlock).First(&extra).Error; err != nil {
