@@ -585,7 +585,6 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	}
 	logrus.Warningf("111bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
 	withdrawParsed, _ := abi.JSON(strings.NewReader(bridge.WithdrawalFinalizerABI))
-	logrus.Warningf("111bridgeEventZKSyncFinalizeWithdrawErc20Handle data:%s", hexutil.Encode(tx.Data()))
 
 	withdraws, err := withdrawParsed.Methods["finalizeWithdrawals"].Inputs.Unpack(tx.Data()[4:])
 	if err != nil {
