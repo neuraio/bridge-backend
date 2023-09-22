@@ -541,7 +541,7 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 
 	client, found := nodeClients[event.networkId]
 	if !found {
-		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle nodeClients[event.networkId] error. networkID:%s", event.networkId)
+		logrus.Errorf("bridgeEventZKSyncFinalizeWithdrawErc20Handle nodeClients[event.networkId] error. networkID:%d", event.networkId)
 		return fmt.Errorf("client not found: %d", event.networkId)
 	}
 	tx, _, err := client.rpcClient.TransactionByHash(context.Background(), common.HexToHash(event.transactionHash))
@@ -585,7 +585,8 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	}
 	logrus.Warningf("111bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawal\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
 	withdrawParsed, _ := abi.JSON(strings.NewReader(bridge.WithdrawalFinalizerABI))
-	withdraws, err := parsed.Methods["finalizeWithdrawals"].Inputs.Unpack(tx.Data()[4:])
+
+	withdraws, err := withdrawParsed.Methods["finalizeWithdrawals"].Inputs.Unpack(tx.Data()[4:])
 	if err != nil {
 		logrus.Warningf("112bridgeEventZKSyncFinalizeWithdrawErc20Handle parsed.Methods[\"finalizeWithdrawals\"] error. transactionHash:%s, err:%s", event.transactionHash, err)
 		return err
@@ -593,6 +594,7 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 	var outs = []bridge.WithdrawalFinalizerRequestFinalizeWithdrawal{}
 	withdrawParsed.Methods["finalizeWithdrawals"].Inputs.Copy(&outs, withdraws)
 	logrus.Warningf("111bridgeEventZKSyncFinalizeWithdrawErc20Handle len:%d", len(outs))
+
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
 	if !ok {
 		logrus.Fatalln("Weird! convert raw transaction client error")
