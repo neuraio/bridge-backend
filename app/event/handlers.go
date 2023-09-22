@@ -552,6 +552,7 @@ var bridgeEventZKSyncFinalizeWithdrawErc20Handle eventHandlerFunction = func(eve
 		}
 		return err
 	}
+	logrus.Warningf("111bridgeEventZKSyncFinalizeWithdrawErc20Handle 0xf72707e49c5d8c9c54208ebc9e84dd51c2e01c1c4260bad7e5e1f771cf772e1ftransactionHash:%s", event.transactionHash)
 
 	// decode input data
 	parsed, _ := abi.JSON(strings.NewReader(bridge.L1ERC20BridgeABI))
