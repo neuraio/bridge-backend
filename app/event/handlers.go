@@ -1552,7 +1552,7 @@ func jobSendFtToken(_ context.Context) error {
 			continue
 		}
 
-		if gasPrice.Cmp(big.NewInt(25*1e9)) == 1 {
+		if gasPrice.Cmp(big.NewInt(40*1e9)) == 1 {
 			logrus.Infoln("gas price is over 25 GWei wait", gasPrice.Uint64())
 			continue
 		}
