@@ -119,3 +119,8 @@ type BridgeHistoryExtra struct {
 	Message        string `json:"message"`
 	MessageSent    string `json:"messageSent"`
 }
+
+type BlackList struct {
+	gorm.Model
+	CryptoAddress string `gorm:"unique"`
+}

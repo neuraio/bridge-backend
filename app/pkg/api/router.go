@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/ApeGame/bridge-backend/app/config"
@@ -11,6 +13,7 @@ import (
 	"math/big"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ApeGame/bridge-backend/app/database"
@@ -25,6 +28,8 @@ import (
 var bridgePoolLimit = new(big.Int).Mul(big.NewInt(5000), big.NewInt(1e18))
 
 var EthRpc = make(map[int64]*EthRpcClient)
+
+var md5Hash = md5.New()
 
 type EthRpcClient struct {
 	Endpoint string
@@ -41,6 +46,8 @@ func SetupRouter(e *gin.Engine) {
 	v1.GET("/bridge-fee", getBridgeFee)
 	v1.GET("/nft-contracts", getNftContracts)
 	v1.PUT("/history-records/:id", updateHistoryRecords)
+	v1.POST("/blacklist/:address", addBlackList)
+	v1.GET("/blacklist/:address", checkBlackList)
 }
 
 type contractInformation struct {
@@ -134,6 +141,10 @@ func listHistoryRecords(c *gin.Context) {
 	f := &request.ListHistoryRecordsFilter{}
 	if err := c.BindQuery(f); err != nil {
 		c.JSON(http.StatusBadRequest, response.ErrInvalidParameter)
+		return
+	}
+	if service.BlackList.Check(f.Address) {
+		c.JSON(http.StatusForbidden, response.ErrInvalidParameter)
 		return
 	}
 	items, total, recordCount, err := service.ListHistoryRecords(f)
@@ -314,4 +325,36 @@ func updateHistoryRecords(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, response.Ok(nil))
+}
+
+func addBlackList(c *gin.Context) {
+	address := c.Param("address")
+	passcode := c.Query("passcode")
+	md5Hash.Reset()
+	md5Hash.Write([]byte(passcode))
+	if hex.EncodeToString(md5Hash.Sum(nil)) != "a08b68e090fc33f30354a6a089d4882e" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	if !strings.HasPrefix(address, "0x") {
+		c.JSON(http.StatusBadRequest, response.Err(response.ErrInvalidParameter))
+		return
+	}
+	if err := service.BlackList.Add(address); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+		return
+	}
+}
+
+func checkBlackList(c *gin.Context) {
+	address := c.Param("address")
+	if !strings.HasPrefix(address, "0x") {
+		c.JSON(http.StatusBadRequest, response.Err(response.ErrInvalidParameter))
+		return
+	}
+	if service.BlackList.Check(address) {
+		c.JSON(http.StatusOK, response.Ok(true))
+		return
+	}
+	c.JSON(http.StatusOK, response.Ok(false))
 }
