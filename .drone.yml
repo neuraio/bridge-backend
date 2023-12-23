@@ -15,6 +15,7 @@ steps:
         - push
       branch:
         - develop
+        
   - name: Deploy app DEV
     image: appleboy/drone-ssh:1.6.6-linux-amd64
     settings:
@@ -34,6 +35,7 @@ steps:
         - push
       branch:
         - develop
+        
   - name: build app PROD
     image: plugins/docker
     settings:
@@ -48,6 +50,7 @@ steps:
         - push
       branch:
         - main
+        
   - name: deploy app PROD
     image: appleboy/drone-ssh:1.6.6-linux-amd64
     settings:
