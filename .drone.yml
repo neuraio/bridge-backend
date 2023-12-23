@@ -51,6 +51,7 @@ steps:
       branch:
         - main
 
+
   - name: deploy app PROD
     image: appleboy/drone-ssh:1.6.6-linux-amd64
     settings:
