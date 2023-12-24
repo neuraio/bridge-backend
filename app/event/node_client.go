@@ -287,7 +287,7 @@ func sendRawTransaction(abi *abi.ABI, client *ethclient.Client, network networkI
 		return "", err
 	}
 
-	nonce, err := client.PendingNonceAt(ctx, sender)
+	nonce, err := client.NonceAt(ctx, sender, nil)
 	if err != nil {
 		return "", err
 	}

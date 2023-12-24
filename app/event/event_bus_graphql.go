@@ -188,6 +188,9 @@ func (ef *FetchThroughGraphQL) subscribeEvents(event chan *LogEvent, nextSignal 
 				continue
 			}
 
+			// ef.heightDelay is a bigger number, this has been checked already
+			height = height - uint64(ef.heightDelay)
+
 			if height < fetchHeightCell {
 				fetchHeightCell = height
 			}

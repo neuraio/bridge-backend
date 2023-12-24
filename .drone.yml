@@ -15,7 +15,7 @@ steps:
       - push
     branch:
       - develop
-- name: go Deploy app DEV
+- name: Deploy app DEV
   image: appleboy/drone-ssh:1.6.6-linux-amd64
   settings:
     host:
