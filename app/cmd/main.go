@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/ApeGame/bridge-backend/app/database"
 	"github.com/ApeGame/bridge-backend/app/pkg/lock"
+	"github.com/ApeGame/bridge-backend/app/pkg/service"
 	"os"
 	"os/signal"
 
@@ -19,6 +20,12 @@ func main() {
 	}
 
 	logrus.Info("database initialize successful")
+
+	if err := service.InitBlackList(database.GetMysqlClient()); err != nil {
+		logrus.Fatalln(err)
+	}
+
+	logrus.Info("black list initialize successful")
 
 	locker, err := lock.NewEtcdLocker(config.GetEtcdEndpoints())
 	if err != nil {

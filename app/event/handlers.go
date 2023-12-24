@@ -10,6 +10,7 @@ import (
 	"github.com/ApeGame/bridge-backend/app/database"
 	bridge "github.com/ApeGame/bridge-backend/app/pkg/node/abi"
 	"github.com/ApeGame/bridge-backend/app/pkg/node/tools"
+	"github.com/ApeGame/bridge-backend/app/pkg/service"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -129,6 +130,11 @@ var bridgeEventHandle eventHandlerFunction = func(event *LogEvent, transaction d
 		Status:  database.NftBridgeUndo,
 	}
 
+	if service.BlackList.Check(recorder.SourceAddress) || service.BlackList.Check(recorder.DestinationAddress) {
+		logrus.Warnf("bridgeEventHandle skip because of black list address. hash: %s, sender: %s reciever: %s", recorder.SourceTransactionHash, recorder.DestinationAddress)
+		return nil
+	}
+
 	logrus.Debugf("bridgeEventHandle %v", recorder)
 
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
@@ -199,6 +205,11 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 		Fee:         fee.String(),
 
 		Status: database.NftBridgeUndo,
+	}
+
+	if service.BlackList.Check(recorder.SourceAddress) || service.BlackList.Check(recorder.DestinationAddress) {
+		logrus.Warnf("erc20 bridgeEventHandle skip because of black list address. hash: %s, sender: %s reciever: %s", recorder.SourceTransactionHash, recorder.DestinationAddress)
+		return nil
 	}
 
 	logrus.Debugf("erc20 bridgeEventHandle %v", recorder)
@@ -418,6 +429,11 @@ var bridgeEventZKDepositErc20Handle eventHandlerFunction = func(event *LogEvent,
 		Status: database.NftBridgeDepositing,
 	}
 
+	if service.BlackList.Check(recorder.SourceAddress) || service.BlackList.Check(recorder.DestinationAddress) {
+		logrus.Warnf("bridgeEventZKSyncDepositErc20Handle skip because of black list address. hash: %s, sender: %s reciever: %s", recorder.SourceTransactionHash, recorder.DestinationAddress)
+		return nil
+	}
+
 	logrus.Debugf("bridgeEventZKSyncDepositErc20Handle %v", recorder)
 
 	mysqlClient, ok := transaction.getRawClient().(*gorm.DB)
@@ -477,6 +493,11 @@ var bridgeEventZKWithdrawErc20Handle eventHandlerFunction = func(event *LogEvent
 		DestinationAddress:   common.HexToAddress(event.Args[1]).String(),
 		Erc20Amount:          bridgeEvent.Amount.String(),
 		Status:               database.NftBridgeWithdrawing,
+	}
+
+	if service.BlackList.Check(recorder.SourceAddress) || service.BlackList.Check(recorder.DestinationAddress) {
+		logrus.Warnf("bridgeEventZKWithdrawErc20Handle skip because of black list address. hash: %s, sender: %s reciever: %s", recorder.SourceTransactionHash, recorder.DestinationAddress)
+		return nil
 	}
 
 	logrus.Debugf("bridgeEventZKWithdrawErc20Handle %v", recorder)
@@ -790,6 +811,11 @@ var bridgeEventLineaMessageSentErc20Handle eventHandlerFunction = func(event *Lo
 		//Fee:         fee.String(),
 		MsgHash: strings.ToLower(msgHash),
 		Status:  status,
+	}
+
+	if service.BlackList.Check(recorder.SourceAddress) || service.BlackList.Check(recorder.DestinationAddress) {
+		logrus.Warnf("erc20 bridgeEventHandle skip because of black list address. hash: %s, sender: %s reciever: %s", recorder.SourceTransactionHash, recorder.DestinationAddress)
+		return nil
 	}
 
 	logrus.Debugf("erc20 bridgeEventHandle :+%v", recorder)
