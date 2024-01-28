@@ -314,7 +314,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 		dataRecordTransactions[networkId(chain.NetworkId)] = dataRecordTransactionMysql
 		nextSignals[networkId(chain.NetworkId)] = nextSignal
 
-		var eventSubscriber eventSubscriber
+		//var eventSubscriber eventSubscriber
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		rpcClient, err := ethclient.DialContext(ctx, chain.RpcUrl)
@@ -336,7 +336,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 			addresses = append(addresses, chain.ZKL1L2Contract20...)
 		}
 		if chain.Graph == "" {
-			eventSubscriber, err = NewEventFetchThroughRpc(rpcClient, addresses, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
+			_, err := NewEventFetchThroughRpc(rpcClient, addresses, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
 			if err != nil {
 				logrus.Fatalln(err)
 			}
@@ -345,7 +345,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 			if config.Debug() {
 				graphClient.Log = graphLog
 			}
-			eventSubscriber, err = NewEventFetchThroughGraphQL(rpcClient, graphClient, addresses, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
+			_, err := NewEventFetchThroughGraphQL(rpcClient, graphClient, addresses, chain.BlockStep, chain.BlockDelay, networkId(chain.NetworkId), 3*time.Second, dataRecordTransactionMysql)
 			if err != nil {
 				logrus.Fatalln(err)
 			}
@@ -364,7 +364,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 		networkIds = append(networkIds, networkId(chain.NetworkId))
 		startSignal := make(chan struct{})
 		startSignals = append(startSignals, startSignal)
-		go eventSubscriber.subscribeEvents(eventLog, nextSignal, startSignal)
+		//go eventSubscriber.subscribeEvents(eventLog, nextSignal, startSignal)
 	}
 
 	// init contracts configuration and start handle events

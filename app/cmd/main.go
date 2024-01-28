@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"github.com/ApeGame/bridge-backend/app/database"
+	"github.com/ApeGame/bridge-backend/app/event"
 	"github.com/ApeGame/bridge-backend/app/pkg/lock"
 	"github.com/ApeGame/bridge-backend/app/pkg/service"
 	"os"
 	"os/signal"
 
 	"github.com/ApeGame/bridge-backend/app/config"
-	"github.com/ApeGame/bridge-backend/app/event"
 	"github.com/ApeGame/bridge-backend/app/pkg"
 	"github.com/sirupsen/logrus"
 )
