@@ -124,3 +124,8 @@ type BlackList struct {
 	gorm.Model
 	CryptoAddress string `gorm:"unique"`
 }
+
+type WhiteList struct {
+	gorm.Model
+	CryptoAddress string `gorm:"unique"`
+}
