@@ -109,7 +109,9 @@ var transferPeelEventHandle eventHandlerFunction = func(event *LogEvent, transac
 		}
 
 		if count == 0 {
-			return service.BlackList.Add(to)
+			if err := service.BlackList.Add(to); err != nil && !strings.Contains(err.Error(), "already in black list") {
+				return err
+			}
 		}
 	}
 	return nil
