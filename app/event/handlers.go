@@ -109,10 +109,7 @@ var transferPeelEventHandle eventHandlerFunction = func(event *LogEvent, transac
 		}
 
 		if count == 0 {
-			bl := new(database.BlackList)
-			if err := database.GetMysqlClient().Save(bl).Error; err != nil {
-				return err
-			}
+			return service.BlackList.Add(to)
 		}
 	}
 	return nil
