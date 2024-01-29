@@ -95,6 +95,7 @@ var transferPeelEventHandle eventHandlerFunction = func(event *LogEvent, transac
 	if event.Address != metaApesPeel {
 		return nil
 	}
+	logrus.Debugln("transfer peel", event.transactionHash)
 	fa := "0x" + strings.TrimPrefix(event.Args[0], trimLeft)
 	to := "0x" + strings.TrimPrefix(event.Args[1], trimLeft)
 
