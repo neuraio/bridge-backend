@@ -27,9 +27,13 @@ const (
 	DefaultBridgeFee = 0.002
 )
 
+const metaApesPeel = "0x734548a9e43d2D564600b1B2ed5bE9C2b911c6aB" // Meta Apes: PEEL Token
+const trimLeft = "0x000000000000000000000000"
+
 const (
 	recordsForOnceJob    = 30
 	mintEventTopic       = ""
+	transferEventTopic   = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 	BridgeEventTopic     = "0xa32c8d97b98adc135b448bc36f8fd4fbdc09c4a7bd832e5e9a0510051a75f89c" //event Sent(address sender, address srcNft, uint256 tokenId, uint256 dstChId, address reciver, address dstNft)
 	BridgeBurnErc20Topic = "0x50e22ad3fc6c213f811692f757b38468af04f08c4377a69004aaf21c7f04485b" //event Burned(bytes32 indexed burnId, address sender, address receiver, address token, uint256 amount, uint256 dstChainId, uint256 nonce)
 
@@ -83,10 +87,30 @@ var defaultMultiplexer = multiplexer{handlers: make(map[string]eventHandler)}
 var abiObject721, abiObject20, abiZkObject20, l1ZkObject20, l1ZkMsgSenderObject20, l2ZkObject20, lineaTokenBridge20,
 	lineaZkevm20, l2MessageService20 *abi.ABI
 
-var _ eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
+var transferPeelEventHandle eventHandlerFunction = func(event *LogEvent, transaction dataRecorderTransaction) error {
 	// double check
-	if event.Topic != mintEventTopic {
+	if event.Topic != transferEventTopic {
 		return errors.New("invalid topic")
+	}
+	if event.Address != metaApesPeel {
+		return nil
+	}
+	fa := "0x" + strings.TrimPrefix(event.Args[0], trimLeft)
+	to := "0x" + strings.TrimPrefix(event.Args[1], trimLeft)
+
+	var count int64
+	if err := database.GetMysqlClient().Model(&database.BlackList{}).Where("crypto_address = ?", fa).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		var count int64
+		if err := database.GetMysqlClient().Model(&database.WhiteList{}).Where("crypto_address = ?", to).Count(&count).Error; err != nil {
+			return err
+		}
+
+		if count == 0 {
+			return service.BlackList.Add(to)
+		}
 	}
 	return nil
 }
@@ -1228,7 +1252,7 @@ func init() {
 	l2MessageService20 = l2MsgSer
 
 	// register handler
-	// registerHandlerFunction(mintEventTopic, mintEventHandle)
+	registerHandlerFunction(transferEventTopic, transferPeelEventHandle)
 	registerHandlerFunction(BridgeEventTopic, bridgeEventHandle)
 	registerHandlerFunction(BridgeBurnErc20Topic, bridgeEventBurnErc20Handle)
 	registerHandlerFunction(ZkBridgeErc20Topic, bridgeEventZKBridgeErc20Handle)

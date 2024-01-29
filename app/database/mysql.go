@@ -25,6 +25,7 @@ func InitializeMysqlDatabase() error {
 		&BridgeHistoryExtra{},
 		&SyncZkProgressRecord{},
 		&BlackList{},
+		&WhiteList{},
 	); err != nil {
 		return err
 	}

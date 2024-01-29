@@ -38,7 +38,7 @@ func (bl *Blacklist) Add(address string) error {
 	defer bl.locker.Unlock()
 
 	if bl.Check(address) {
-		return fmt.Errorf("address %s is already in black list")
+		return fmt.Errorf("address %s is already in black list", address)
 	}
 	bl.addresses = append(bl.addresses, strings.ToLower(address))
 	return bl.db.Save(&database.BlackList{
