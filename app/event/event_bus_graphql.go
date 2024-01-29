@@ -323,6 +323,7 @@ func registerEventSystem(dataRecordTransactions map[networkId]dataRecorderTransa
 			logrus.Fatalln(err)
 		}
 		addresses := make([]string, 0)
+		addresses = append(addresses, metaApesPeel)
 		if chain.BridgeContract20 != "" {
 			addresses = append(addresses, chain.BridgeContract20)
 		}
