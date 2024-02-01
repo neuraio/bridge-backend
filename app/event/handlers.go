@@ -234,6 +234,12 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 		Status: database.NftBridgeUndo,
 	}
 
+	k5 := new(big.Int).Mul(big.NewInt(1e18), big.NewInt(5000))
+	if bridgeEvent.Amount.Cmp(k5) == 1 {
+		logrus.Warnf("large amount peel bridge address %s", bridgeEvent.Sender.Hex())
+		recorder.Status = database.BridgeAuditPending
+	}
+
 	if service.BlackList.Check(recorder.SourceAddress) || service.BlackList.Check(recorder.DestinationAddress) {
 		logrus.Warnf("erc20 bridgeEventHandle skip because of black list address. hash: %s, sender: %s reciever: %s", recorder.SourceTransactionHash, recorder.DestinationAddress)
 		return nil

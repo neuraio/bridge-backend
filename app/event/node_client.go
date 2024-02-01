@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/sirupsen/logrus"
 	"math/big"
 	"strings"
 	"sync"
@@ -152,11 +151,6 @@ func MintTokens(destinationNetworkId networkId, bridges []*ercBridge) (string, e
 		}
 		copy(req.BurnId[:], common.Hex2BytesFixed(strings.TrimPrefix(b.burnId, "0x"), 32))
 
-		k5 := new(big.Int).Mul(big.NewInt(1e18), big.NewInt(5000))
-		if req.Amount.Cmp(k5) == 1 {
-			logrus.Warnf("large amount peel bridge address %s", b.senderAddress)
-			continue
-		}
 		reqs = append(reqs, req)
 	}
 

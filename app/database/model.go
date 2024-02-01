@@ -23,7 +23,8 @@ const (
 	NftBridgeDepositRefund
 	NftBridgeMessageSent        /// linea <= geroli
 	NftBridgeMessageSentSuccess // linea <=> geroli
-	NftBridgeMessageSent2       /// linea => geroli
+	NftBridgeMessageSent2
+	BridgeAuditPending
 )
 
 type Protocol string
