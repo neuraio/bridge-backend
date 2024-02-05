@@ -234,8 +234,8 @@ var bridgeEventBurnErc20Handle eventHandlerFunction = func(event *LogEvent, tran
 		Status: database.NftBridgeUndo,
 	}
 
-	k5 := new(big.Int).Mul(big.NewInt(1e18), big.NewInt(5000))
-	if bridgeEvent.Amount.Cmp(k5) == 1 {
+	k50 := new(big.Int).Mul(big.NewInt(1e18), big.NewInt(50000))
+	if bridgeEvent.Amount.Cmp(k50) == 1 {
 		logrus.Warnf("large amount peel bridge address %s", bridgeEvent.Sender.Hex())
 		recorder.Status = database.BridgeAuditPending
 	}
