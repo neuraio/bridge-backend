@@ -256,7 +256,7 @@ func checkBridgeStatus() error {
 
 func checkBridgeStatusFix() error {
 	var count int64
-	if err := database.GetMysqlClient().Model(new(database.BridgeHistory)).Where("status in  ?", []int{-1, -2, -3, -4, -5, -6}).Count(&count).Error; err != nil {
+	if err := database.GetMysqlClient().Model(new(database.BridgeHistory)).Where("status in  ?", []int{-1, -2, -3, -4, -5, -6, 16}).Count(&count).Error; err != nil {
 		return err
 	}
 	if count > 0 {
